@@ -1,0 +1,66 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+config.yaml
+config.yml
+*.key
+*.pem
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# RAG/vector index artifacts
+faiss_index/
+indexes/
+indices/
+vectorstore/
+vectorstores/
+*.faiss
+*.index
+*.pkl
+*.pickle
+
+# Data policy: only commit the first-version cook corpus
+data/*
+!data/cook/
+!data/cook/**
+*.zip
+
+# Personal notes
+docs/note/
+
+# Runtime logs and temporary output
+logs/
+*.log
+tmp/
+temp/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
