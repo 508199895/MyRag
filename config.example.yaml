@@ -15,6 +15,7 @@ splitter:
     - ["#", "h1"]
     - ["##", "h2"]
     - ["###", "h3"]
+  strip_headers: false
 
 embedding:
   provider: huggingface
@@ -24,12 +25,14 @@ embedding:
   query_instruction: "为这个句子生成表示以用于检索相关文章："
 
 retrieval:
+  type: similarity
   top_k: 4
 
 generation:
   provider: openai_compatible
   base_url: https://api.deepseek.com
   model_name: deepseek-v4-flash
+  api_key: $DEEPSEEK_API_KEY
   prompt_template_path: docs/prompts/llm_generator.md
   temperature: 0.2
   max_tokens: 1024

@@ -320,6 +320,7 @@ splitter:
     - ["#", "h1"]
     - ["##", "h2"]
     - ["###", "h3"]
+  strip_headers: false
 
 embedding:
   provider: huggingface

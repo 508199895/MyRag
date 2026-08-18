@@ -31,9 +31,19 @@ python -m src -s y
 python -m src -s n
 python -m src --debug
 pytest tests -v
+python -m pytest tests -v --tb=short --cov=src --cov-report=term-missing --basetemp=.pytest_tmp
+act pull_request -W .github\workflows\ci.yml -j test -s DEEPSEEK_API_KEY=dummy
 ```
 
 `python -m src` 启动连续问答 CLI。`-s y|n` 控制是否流式输出。`--debug` 显示检索来源、chunk id、相似度分数和更具体的错误信息。
+
+## CI 规则
+1. 提交前必须本地跑过 `make ci-local`，确保通过；这等价于 CI 上跑的所有检查
+在本地 30 秒内能跑完，比等 CI 5 分钟快得多
+2. 如果 CI 挂了：
+先看哪一步挂的，贴出失败日志
+不要"猜测式修复"—先复现再修
+修完之后本地跑一次 `make ci-local` 再 push
 
 ## 红线
 

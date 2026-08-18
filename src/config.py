@@ -1,45 +1,46 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import re
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
-try:
-    import yaml
-except ModuleNotFoundError:  # pragma: no cover - exercised only before deps are installed.
-    yaml = None
-
-try:
-    from dotenv import dotenv_values
-except ModuleNotFoundError:  # pragma: no cover - exercised only before deps are installed.
-    dotenv_values = None
+import yaml
+from dotenv import load_dotenv
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 class ConfigError(Exception):
     """Raised when local runtime configuration is missing or invalid."""
 
 
-@dataclass(frozen=True)
-class DocumentsConfig:
+class ConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class DocumentsConfig(ConfigModel):
     library_paths: list[str]
     include_extensions: list[str]
 
 
-@dataclass(frozen=True)
-class IndexConfig:
+class IndexConfig(ConfigModel):
     persist_dir: str
     rebuild_on_source_change: bool
 
 
-@dataclass(frozen=True)
-class SplitterConfig:
-    type: str
-    headers_to_split_on: list[list[str]]
+class MarkdownHeaderSplitterConfig(ConfigModel):
+    type: Literal["markdown_header"]
+    headers_to_split_on: list[tuple[str, str]]
+    strip_headers: bool
 
 
-@dataclass(frozen=True)
-class EmbeddingConfig:
+class RecursiveCharacterSplitterConfig(ConfigModel):
+    type: Literal["recursive_character"]
+    chunk_size: int
+    chunk_overlap: int
+
+
+class EmbeddingConfig(ConfigModel):
     provider: str
     model_name: str
     device: str
@@ -47,30 +48,45 @@ class EmbeddingConfig:
     query_instruction: str
 
 
-@dataclass(frozen=True)
-class RetrievalConfig:
+class SimilarityRetrievalConfig(ConfigModel):
+    type: Literal["similarity"]
     top_k: int
 
 
-@dataclass(frozen=True)
-class GenerationConfig:
+class MmrRetrievalConfig(ConfigModel):
+    type: Literal["mmr"]
+    top_k: int
+    fetch_k: int
+    lambda_mult: float
+
+
+class GenerationConfig(ConfigModel):
     provider: str
     base_url: str
     model_name: str
+    api_key: str
     prompt_template_path: str
     temperature: float
     max_tokens: int
-    api_key: str
 
 
-@dataclass(frozen=True)
-class RuntimeConfig:
+class RuntimeConfig(ConfigModel):
     stream: bool
     debug: bool
 
 
-@dataclass(frozen=True)
-class AppConfig:
+SplitterConfig = Annotated[
+    MarkdownHeaderSplitterConfig | RecursiveCharacterSplitterConfig,
+    Field(discriminator="type"),
+]
+
+RetrievalConfig = Annotated[
+    SimilarityRetrievalConfig | MmrRetrievalConfig,
+    Field(discriminator="type"),
+]
+
+
+class AppConfig(ConfigModel):
     documents: DocumentsConfig
     index: IndexConfig
     splitter: SplitterConfig
@@ -80,15 +96,7 @@ class AppConfig:
     runtime: RuntimeConfig
 
 
-REQUIRED_SECTIONS = (
-    "documents",
-    "index",
-    "splitter",
-    "embedding",
-    "retrieval",
-    "generation",
-    "runtime",
-)
+ENV_PATTERN = re.compile(r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))")
 
 
 def load_config(config_path: str | Path = "config.yaml", env_path: str | Path = ".env") -> AppConfig:
@@ -96,153 +104,44 @@ def load_config(config_path: str | Path = "config.yaml", env_path: str | Path = 
     env_file = Path(env_path)
 
     if not config_file.exists():
-        raise ConfigError("缺少 config.yaml，请复制 config.example.yaml 为 config.yaml 后再启动。")
-
-    data = _load_yaml(config_file)
-    _validate_required_sections(data)
-
-    env_values = _load_env(env_file)
-    api_key = env_values.get("DEEPSEEK_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise ConfigError("缺少 DEEPSEEK_API_KEY，请填写 .env 后再启动。")
-
-    documents = data["documents"]
-    index = data["index"]
-    splitter = data["splitter"]
-    embedding = data["embedding"]
-    retrieval = data["retrieval"]
-    generation = data["generation"]
-    runtime = data["runtime"]
-
-    return AppConfig(
-        documents=DocumentsConfig(
-            library_paths=list(documents["library_paths"]),
-            include_extensions=list(documents["include_extensions"]),
-        ),
-        index=IndexConfig(
-            persist_dir=str(index["persist_dir"]),
-            rebuild_on_source_change=bool(index["rebuild_on_source_change"]),
-        ),
-        splitter=SplitterConfig(
-            type=str(splitter["type"]),
-            headers_to_split_on=[list(header) for header in splitter["headers_to_split_on"]],
-        ),
-        embedding=EmbeddingConfig(
-            provider=str(embedding["provider"]),
-            model_name=str(embedding["model_name"]),
-            device=str(embedding["device"]),
-            normalize_embeddings=bool(embedding["normalize_embeddings"]),
-            query_instruction=str(embedding["query_instruction"]),
-        ),
-        retrieval=RetrievalConfig(top_k=int(retrieval["top_k"])),
-        generation=GenerationConfig(
-            provider=str(generation["provider"]),
-            base_url=str(generation["base_url"]),
-            model_name=str(generation["model_name"]),
-            prompt_template_path=str(generation["prompt_template_path"]),
-            temperature=float(generation["temperature"]),
-            max_tokens=int(generation["max_tokens"]),
-            api_key=api_key,
-        ),
-        runtime=RuntimeConfig(
-            stream=bool(runtime["stream"]),
-            debug=bool(runtime["debug"]),
-        ),
-    )
-
-
-def _load_yaml(config_file: Path) -> dict[str, Any]:
-    text = config_file.read_text(encoding="utf-8")
-    if yaml is None:
-        data = _load_project_yaml(text)
-    else:
-        data = yaml.safe_load(text)
-
-    if not isinstance(data, dict):
-        raise ConfigError("config.yaml 内容必须是 YAML mapping。")
-    return data
-
-
-def _load_project_yaml(text: str) -> dict[str, Any]:
-    data: dict[str, Any] = {}
-    current_section: str | None = None
-    current_list_key: str | None = None
-
-    for raw_line in text.splitlines():
-        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
-            continue
-
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        line = raw_line.strip()
-
-        if indent == 0 and line.endswith(":"):
-            current_section = line[:-1]
-            data[current_section] = {}
-            current_list_key = None
-            continue
-
-        if current_section is None:
-            raise ConfigError("config.yaml 内容必须使用顶层 section。")
-
-        section_data = data[current_section]
-
-        if indent == 2 and line.endswith(":"):
-            current_list_key = line[:-1]
-            section_data[current_list_key] = []
-            continue
-
-        if indent == 2 and ":" in line:
-            key, value = line.split(":", 1)
-            section_data[key.strip()] = _parse_scalar(value.strip())
-            current_list_key = None
-            continue
-
-        if indent == 4 and line.startswith("- ") and current_list_key is not None:
-            section_data[current_list_key].append(_parse_scalar(line[2:].strip()))
-            continue
-
-        raise ConfigError(f"无法解析 config.yaml 行: {raw_line}")
-
-    return data
-
-
-def _parse_scalar(value: str) -> Any:
-    if value == "true":
-        return True
-    if value == "false":
-        return False
-    if value.startswith("[") and value.endswith("]"):
-        return [_parse_scalar(item.strip()) for item in value[1:-1].split(",")]
-    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
-        return value[1:-1]
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        return value
-
-
-def _validate_required_sections(data: dict[str, Any]) -> None:
-    for section in REQUIRED_SECTIONS:
-        if section not in data:
-            raise ConfigError(f"缺少必需配置 section: {section}")
-
-
-def _load_env(env_file: Path) -> dict[str, str]:
+        raise ConfigError(f"缺少 {config_file}，请复制 config.example.yaml 为 config.yaml 并填写配置。")
     if not env_file.exists():
-        return {}
+        raise ConfigError(f"缺少 {env_file}，请复制 .env.example 为 .env 并填写 DEEPSEEK_API_KEY。")
 
-    if dotenv_values is not None:
-        return {key: value for key, value in dotenv_values(env_file).items() if value is not None}
+    load_dotenv(env_file, override=False)
+    config_data = _read_config_data(config_file)
+    resolved_config_data = _resolve_env_variables(config_data)
 
-    values: dict[str, str] = {}
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        values[key.strip()] = value.strip().strip("\"'")
-    return values
+    try:
+        return AppConfig.model_validate(resolved_config_data)
+    except ValidationError as exc:
+        raise ConfigError(f"config.yaml 配置不完整或格式错误：{exc}") from exc
+
+
+def _read_config_data(config_file: Path) -> dict[str, Any]:
+    try:
+        config_data = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"config.yaml 不是有效的 YAML：{exc}") from exc
+
+    if not isinstance(config_data, dict):
+        raise ConfigError("config.yaml 必须是 YAML 映射。")
+    return config_data
+
+
+def _resolve_env_variables(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _resolve_env_variables(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_resolve_env_variables(item) for item in value]
+    if isinstance(value, str):
+        return ENV_PATTERN.sub(_replace_env_variable, value)
+    return value
+
+
+def _replace_env_variable(match: re.Match[str]) -> str:
+    name = match.group("braced") or match.group("plain")
+    value = os.environ.get(name)
+    if not value:
+        raise ConfigError(f"环境变量 {name} 未设置，请在 .env 中填写。")
+    return value

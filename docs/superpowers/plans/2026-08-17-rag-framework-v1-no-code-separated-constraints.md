@@ -121,19 +121,17 @@
 - `.env` 位于项目根目录，只保存密钥，不提交 git。
 - `config.example.yaml` 必须包含 spec 第 6.1 节推荐结构。
 - `.env.example` 必须包含 `DEEPSEEK_API_KEY=your-api-key`。
-- 缺少 `config.yaml` 时，启动失败并提示复制 `config.example.yaml` 为 `config.yaml`。
+- 缺少 `config.yaml` 时，启动失败并提示填写 `config.yaml`。
 - 缺少 `DEEPSEEK_API_KEY` 时，启动失败并提示填写 `.env`。
 
-- [ ] Step 1: 编写配置读取测试，覆盖能读取 `config.yaml` 与 `.env`。
-- [ ] Step 2: 编写配置缺失测试，覆盖根目录没有 `config.yaml` 时给出清晰错误。
-- [ ] Step 3: 编写密钥缺失测试，覆盖 `.env` 中没有 `DEEPSEEK_API_KEY` 时给出清晰错误。
-- [ ] Step 4: 编写必需字段测试，覆盖缺少 `documents`、`index`、`splitter`、`embedding`、`retrieval`、`generation`、`runtime` 任一 section 时失败。
-- [ ] Step 5: 运行 `pytest tests/unit/test_config.py -v`，确认由于实现尚未完成而失败。
-- [ ] Step 6: 实现配置读取、环境变量读取和必需字段校验。
-- [ ] Step 7: 创建 `config.example.yaml`，字段覆盖文档库、索引、splitter、embedding、retrieval、generation、runtime。
-- [ ] Step 8: 创建 `.env.example`。
-- [ ] Step 9: 运行 `pytest tests/unit/test_config.py -v`，确认通过。
-- [ ] Step 10: 提交本任务变更，提交信息为 `feat: add configuration loading`。
+- [ ] Step 1: 实现配置读取、环境变量读取和必需字段校验。
+- [ ] Step 2: 创建 `config.example.yaml`，字段覆盖文档库、索引、splitter、embedding、retrieval、generation、runtime。
+- [ ] Step 3: 创建 `.env.example`。
+- [ ] Step 4: 创建配置缺失测试用例，覆盖根目录没有 `config.yaml`，以及 `config.yaml` 缺少 `documents`、`index`、`splitter`、`embedding`、`retrieval`、`generation`、`runtime` 任一 section 时给出清晰错误。
+- [ ] Step 5: 创建密钥缺失测试用例，覆盖 `.env` 中没有 `DEEPSEEK_API_KEY` 时给出清晰错误。
+- [ ] Step 6: 创建 `test_config.py`，测试正常情况和边界情况。
+- [ ] Step 7: 运行 `pytest tests/unit/test_config.py -v`，确认通过。
+- [ ] Step 8: 向我申请提交本任务变更，提交信息为 `feat: add configuration loading`。
 
 ### Task 3: Prompt 模板加载与渲染
 
