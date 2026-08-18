@@ -1,0 +1,39 @@
+documents:
+  library_paths:
+    - data/cook
+  include_extensions:
+    - .md
+    - .txt
+
+index:
+  persist_dir: storage/faiss/default
+  rebuild_on_source_change: true
+
+splitter:
+  type: markdown_header
+  headers_to_split_on:
+    - ["#", "h1"]
+    - ["##", "h2"]
+    - ["###", "h3"]
+
+embedding:
+  provider: huggingface
+  model_name: BAAI/bge-small-zh-v1.5
+  device: cpu
+  normalize_embeddings: true
+  query_instruction: "为这个句子生成表示以用于检索相关文章："
+
+retrieval:
+  top_k: 4
+
+generation:
+  provider: openai_compatible
+  base_url: https://api.deepseek.com
+  model_name: deepseek-v4-flash
+  prompt_template_path: docs/prompts/llm_generator.md
+  temperature: 0.2
+  max_tokens: 1024
+
+runtime:
+  stream: true
+  debug: false

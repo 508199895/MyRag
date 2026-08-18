@@ -137,6 +137,7 @@ RAG/
 ├─ .env.example                    # 可提交环境变量模板
 ├─ config.yaml                     # 本地真实配置，不提交
 ├─ .env                            # 本地真实密钥，不提交
+├─ .gitignore                      # Git 忽略规则
 ├─ requirements.txt
 └─ AGENTS.md
 ```
@@ -369,7 +370,46 @@ config.yaml
 .env
 ```
 
-## 7. 运行行为
+## 7. 版本控制与忽略规则
+
+当前项目目录已经是 Git 仓库。项目应通过 Git 管理源码、文档、测试、配置模板和 Prompt 模板，但必须避免提交本地敏感配置、索引产物、虚拟环境和缓存。
+
+应提交到 Git 的内容：
+
+- `src/` 应用源码。
+- `tests/` 自动化测试。
+- `docs/spec.md`、`docs/prompts/llm_generator.md` 等项目文档和 Prompt 模板。
+- `config.example.yaml`。
+- `.env.example`。
+- `requirements.txt`。
+- `AGENTS.md`。
+
+不应提交到 Git 的内容：
+
+- `.env`。
+- `config.yaml`。
+- `index.persist_dir` 指向的 FAISS 索引目录，例如 `storage/faiss/`。
+- LangChain FAISS 产物：`index.faiss`、`index.pkl`。
+- 虚拟环境目录，包括项目内残留 venv 或其他本地环境目录。
+- Python 缓存目录，例如 `__pycache__/`、`.pytest_cache/`。
+- 大型临时数据、运行缓存和本地实验输出。
+
+需要提供并维护 `.gitignore`，至少覆盖：
+
+```gitignore
+.env
+config.yaml
+storage/
+*.faiss
+*.pkl
+__pycache__/
+.pytest_cache/
+RAG_2026/
+```
+
+如果后续将现有 `test/` 中的 notebook 迁移到 `experiments/`，迁移操作应通过 Git 记录；但 `experiments/` 中的大型临时输出不应提交。
+
+## 8. 运行行为
 
 启动命令：
 
@@ -415,7 +455,7 @@ debug 模式行为：
 - 索引缺失或过期时自动构建或重建。
 - LLM API 调用失败时只显示面向用户的失败信息。
 
-## 8. 索引生命周期
+## 9. 索引生命周期
 
 启动阶段：
 
@@ -466,7 +506,7 @@ else:
 → 生成 index.faiss + index.pkl
 ```
 
-## 9. 查询数据流
+## 10. 查询数据流
 
 每轮查询流程：
 
@@ -503,7 +543,7 @@ LLM API 调用失败时：
 回答生成失败：DeepSeek API 调用失败，请检查 API Key、base_url、模型名或网络连接。
 ```
 
-## 10. Prompt 模板
+## 11. Prompt 模板
 
 Prompt 模板路径由配置指定：
 
@@ -523,7 +563,7 @@ generation:
 
 回答风格由模板决定。推荐模板表达“严格基于检索内容回答；检索内容不足时说明无法从资料中确定”，但第一版不在代码中写死回答风格。
 
-## 11. 错误处理与边界情况
+## 12. 错误处理与边界情况
 
 配置缺失：
 
@@ -600,7 +640,7 @@ LLM API 调用失败：
 - 输出回答生成中断或失败提示。
 - 回到下一轮提问。
 
-## 12. 测试与验收标准
+## 13. 测试与验收标准
 
 正式自动化测试统一放在 `tests/` 目录中，使用 pytest 组织。
 
@@ -623,7 +663,7 @@ tests/
 
 `experiments/` 仅保存探索性 notebook 和临时实验材料，不作为 pytest 自动化测试目录。
 
-### 12.1 单元测试
+### 13.1 单元测试
 
 配置读取：
 
@@ -654,7 +694,7 @@ CLI 参数：
 - `--debug` 开启调试模式。
 - 非法 `-s` 值报错。
 
-### 12.2 轻量集成测试
+### 13.2 轻量集成测试
 
 - 使用小型 Markdown/TXT fixture 文档库构建 FAISS 索引。
 - 构建后能在配置目录看到 `index.faiss` 和 `index.pkl`。
@@ -664,7 +704,7 @@ CLI 参数：
 - 检索为空时不调用 LLM，并返回“未检索到相关内容。”
 - LLM API 调用失败时返回失败信息，并继续下一轮。
 
-### 12.3 CLI 人工验收
+### 13.3 CLI 人工验收
 
 - 执行 `python -m src` 后进入交互式循环。
 - 显示：
@@ -680,7 +720,7 @@ CLI 参数：
 - `python -m src --debug` 显示来源、相似度、必要时显示重建确认。
 - LLM API 失败时返回失败信息并继续下一轮。
 
-### 12.4 后续评测扩展验收
+### 13.4 后续评测扩展验收
 
 以下内容不属于第一版验收范围，但模块结构需为它们预留位置：
 
@@ -688,7 +728,7 @@ CLI 参数：
 - 支持 Recall@k、MRR、Hit Rate。
 - 支持端到端 QA 评测。
 
-## 13. 依赖与运行环境
+## 14. 依赖与运行环境
 
 第一版使用 Python 3.13 作为默认运行版本。
 
@@ -720,7 +760,7 @@ pip install -r requirements.txt
 - python-dotenv
 - PyYAML
 
-## 14. 后续扩展方向
+## 15. 后续扩展方向
 
 数据源扩展：
 

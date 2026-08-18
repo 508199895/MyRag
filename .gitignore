@@ -23,6 +23,7 @@ htmlcov/
 venv/
 env/
 ENV/
+RAG_2026/
 
 # Build and packaging output
 build/
@@ -33,6 +34,7 @@ dist/
 .ipynb_checkpoints/
 
 # RAG/vector index artifacts
+storage/
 faiss_index/
 indexes/
 indices/
