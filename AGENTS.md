@@ -47,7 +47,7 @@ act pull_request -W .github\workflows\ci.yml -j test -s DEEPSEEK_API_KEY=dummy
 
 ## 红线
 
-不要提交或泄露 `.env`、`config.yaml`、API Key、FAISS 索引产物、虚拟环境、缓存目录。第一版不实现 PDF、网页抓取、图片、多模态、parquet/jsonl/tsv 数据集加载、Web/API 服务、多轮记忆、增量索引或日志系统。不要把 `test/` 当作正式测试目录；正式测试必须进入 `tests/`。如果需要安装依赖或联网下载模型，先征得用户同意。
+不要提交或泄露 `.env`、API Key、FAISS 索引产物、虚拟环境、缓存目录；`config.yaml` 可以提交，但不得包含密钥或个人本地路径。第一版不实现 PDF、网页抓取、图片、多模态、parquet/jsonl/tsv 数据集加载、Web/API 服务、多轮记忆、增量索引或日志系统。不要把 `test/` 当作正式测试目录；正式测试必须进入 `tests/`。如果需要安装依赖或联网下载模型，先征得用户同意。
 
 ## 历史教训
 

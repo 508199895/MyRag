@@ -135,7 +135,7 @@ RAG/
 │  └─ fixtures/                    # 测试用文档、配置、Prompt 等小样本
 ├─ config.example.yaml             # 可提交配置模板
 ├─ .env.example                    # 可提交环境变量模板
-├─ config.yaml                     # 本地真实配置，不提交
+├─ config.yaml                     # 运行配置，可提交但不得包含密钥或个人本地路径
 ├─ .env                            # 本地真实密钥，不提交
 ├─ .gitignore                      # Git 忽略规则
 ├─ requirements.txt
@@ -298,7 +298,7 @@ deepseek-v4-flash
 
 ### 6.1 `config.yaml`
 
-`config.yaml` 位于项目根目录，是本地真实运行配置，不提交 git。
+`config.yaml` 位于项目根目录，是运行配置，可以提交 git，但不得包含 API Key、个人本地路径或其他敏感信息。密钥必须通过 `.env` 或环境变量提供。
 
 推荐结构：
 
@@ -330,12 +330,14 @@ embedding:
   query_instruction: "为这个句子生成表示以用于检索相关文章："
 
 retrieval:
+  type: similarity
   top_k: 4
 
 generation:
   provider: openai_compatible
   base_url: https://api.deepseek.com
   model_name: deepseek-v4-flash
+  api_key: $DEEPSEEK_API_KEY
   prompt_template_path: docs/prompts/llm_generator.md
   temperature: 0.2
   max_tokens: 1024
@@ -364,10 +366,9 @@ config.example.yaml
 .env.example
 ```
 
-真实文件不提交：
+真实密钥文件不提交：
 
 ```text
-config.yaml
 .env
 ```
 
@@ -381,6 +382,7 @@ config.yaml
 - `tests/` 自动化测试。
 - `docs/spec.md`、`docs/prompts/llm_generator.md` 等项目文档和 Prompt 模板。
 - `config.example.yaml`。
+- `config.yaml`，前提是不包含密钥或个人本地路径。
 - `.env.example`。
 - `requirements.txt`。
 - `AGENTS.md`。
@@ -388,7 +390,6 @@ config.yaml
 不应提交到 Git 的内容：
 
 - `.env`。
-- `config.yaml`。
 - `index.persist_dir` 指向的 FAISS 索引目录，例如 `storage/faiss/`。
 - LangChain FAISS 产物：`index.faiss`、`index.pkl`。
 - 虚拟环境目录，包括项目内残留 venv 或其他本地环境目录。
@@ -399,7 +400,6 @@ config.yaml
 
 ```gitignore
 .env
-config.yaml
 storage/
 *.faiss
 *.pkl

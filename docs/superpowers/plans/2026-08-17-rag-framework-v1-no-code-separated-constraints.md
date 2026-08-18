@@ -28,7 +28,8 @@
 - 第一版不实现多轮对话记忆。
 - 第一版不实现增量索引；源文件变化时整体重建索引。
 - 第一版不实现日志系统，仅预留后续扩展空间。
-- `config.yaml` 与 `.env` 是本地真实配置，不提交 git。
+- `config.yaml` 是运行配置，可以提交 git，但不得包含密钥或个人本地路径。
+- `.env` 是本地真实密钥配置，不提交 git。
 - `config.example.yaml` 与 `.env.example` 是可提交模板。
 - 正式自动化测试统一放在 `tests/` 目录中，使用 pytest 组织。
 - `experiments/` 仅保存探索性 notebook 和临时实验材料，不作为 pytest 自动化测试目录。
@@ -67,7 +68,7 @@
 - Create: `tests/integration/`，pytest 集成测试。
 - Create: `tests/fixtures/`，测试用文档、配置、Prompt 等小样本。
 - Rename or move: `test/*.ipynb` to `experiments/*.ipynb`，保留探索性 notebook，不混入正式测试目录。
-- Create or modify: `.gitignore`，忽略 `.env`、`config.yaml`、`storage/`、虚拟环境和测试缓存。
+- Create or modify: `.gitignore`，忽略 `.env`、`storage/`、虚拟环境和测试缓存。
 - Create or modify: `README.md`，记录安装、配置、运行和人工验收步骤。
 
 ### Task 1: 项目目录、依赖与测试骨架
@@ -99,7 +100,7 @@
 - [ ] Step 4: 将现有探索性 notebook 从 `test/` 移入 `experiments/`。
 - [ ] Step 5: 确认迁移后 `test/` 不再作为 pytest 自动化测试入口。
 - [ ] Step 6: 创建 `requirements.txt`，列出项目直接依赖方向：LangChain、FAISS、HuggingFace / sentence-transformers、OpenAI-compatible Chat API 客户端、python-dotenv、PyYAML、pytest。
-- [ ] Step 7: 创建或更新 `.gitignore`，忽略 `.env`、`config.yaml`、`storage/`、`RAG_2026/`、`__pycache__/`、`.pytest_cache/`。
+- [ ] Step 7: 创建或更新 `.gitignore`，忽略 `.env`、`storage/`、`RAG_2026/`、`__pycache__/`、`.pytest_cache/`。
 - [ ] Step 8: 运行 `pytest tests -v`，预期当前无测试或后续任务前暂无有效用例。
 - [ ] Step 9: 提交本任务变更，提交信息为 `chore: scaffold rag project structure`。
 
@@ -117,7 +118,7 @@
 - Produces: `load_config(config_path="config.yaml", env_path=".env")`
 
 **Local Constraints:**
-- `config.yaml` 位于项目根目录，是本地真实运行配置，不提交 git。
+- `config.yaml` 位于项目根目录，是运行配置，可以提交 git，但不得包含密钥或个人本地路径。
 - `.env` 位于项目根目录，只保存密钥，不提交 git。
 - `config.example.yaml` 必须包含 spec 第 6.1 节推荐结构。
 - `.env.example` 必须包含 `DEEPSEEK_API_KEY=your-api-key`。

@@ -79,4 +79,4 @@ python -m src --debug
 
 ## 注意事项
 
-不要提交 `.env`、`config.yaml`、API Key、FAISS 索引产物、虚拟环境或缓存目录。
+不要提交 `.env`、API Key、FAISS 索引产物、虚拟环境或缓存目录。`config.yaml` 可以提交，但不得包含密钥或个人本地路径。
