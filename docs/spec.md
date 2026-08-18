@@ -789,3 +789,5 @@ pip install -r requirements.txt
 - 多 Embedding provider。
 - 多 LLM provider。
 - 日志配置。
+
+更新时间2026/8/18
