@@ -101,7 +101,7 @@
 - [ ] Step 6: 创建 `requirements.txt`，列出项目直接依赖方向：LangChain、FAISS、HuggingFace / sentence-transformers、OpenAI-compatible Chat API 客户端、python-dotenv、PyYAML、pytest。
 - [ ] Step 7: 创建或更新 `.gitignore`，忽略 `.env`、`config.yaml`、`storage/`、`RAG_2026/`、`__pycache__/`、`.pytest_cache/`。
 - [ ] Step 8: 运行 `pytest tests -v`，预期当前无测试或后续任务前暂无有效用例。
-- [ ] Step 9: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `chore: scaffold rag project structure`。
+- [ ] Step 9: 提交本任务变更，提交信息为 `chore: scaffold rag project structure`。
 
 ### Task 2: 配置读取与模板文件
 
@@ -121,19 +121,17 @@
 - `.env` 位于项目根目录，只保存密钥，不提交 git。
 - `config.example.yaml` 必须包含 spec 第 6.1 节推荐结构。
 - `.env.example` 必须包含 `DEEPSEEK_API_KEY=your-api-key`。
-- 缺少 `config.yaml` 时，启动失败并提示复制 `config.example.yaml` 为 `config.yaml`。
+- 缺少 `config.yaml` 时，启动失败并提示填写 `config.yaml`。
 - 缺少 `DEEPSEEK_API_KEY` 时，启动失败并提示填写 `.env`。
 
-- [ ] Step 1: 编写配置读取测试，覆盖能读取 `config.yaml` 与 `.env`。
-- [ ] Step 2: 编写配置缺失测试，覆盖根目录没有 `config.yaml` 时给出清晰错误。
-- [ ] Step 3: 编写密钥缺失测试，覆盖 `.env` 中没有 `DEEPSEEK_API_KEY` 时给出清晰错误。
-- [ ] Step 4: 编写必需字段测试，覆盖缺少 `documents`、`index`、`splitter`、`embedding`、`retrieval`、`generation`、`runtime` 任一 section 时失败。
-- [ ] Step 5: 运行 `pytest tests/unit/test_config.py -v`，确认由于实现尚未完成而失败。
-- [ ] Step 6: 实现配置读取、环境变量读取和必需字段校验。
-- [ ] Step 7: 创建 `config.example.yaml`，字段覆盖文档库、索引、splitter、embedding、retrieval、generation、runtime。
-- [ ] Step 8: 创建 `.env.example`。
-- [ ] Step 9: 运行 `pytest tests/unit/test_config.py -v`，确认通过。
-- [ ] Step 10: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add configuration loading`。
+- [ ] Step 1: 实现配置读取、环境变量读取和必需字段校验。
+- [ ] Step 2: 创建 `config.example.yaml`，字段覆盖文档库、索引、splitter、embedding、retrieval、generation、runtime。
+- [ ] Step 3: 创建 `.env.example`。
+- [ ] Step 4: 创建配置缺失测试用例，覆盖根目录没有 `config.yaml`，以及 `config.yaml` 缺少 `documents`、`index`、`splitter`、`embedding`、`retrieval`、`generation`、`runtime` 任一 section 时给出清晰错误。
+- [ ] Step 5: 创建密钥缺失测试用例，覆盖 `.env` 中没有 `DEEPSEEK_API_KEY` 时给出清晰错误。
+- [ ] Step 6: 创建 `test_config.py`，测试正常情况和边界情况。
+- [ ] Step 7: 运行 `pytest tests/unit/test_config.py -v`，确认通过。
+- [ ] Step 8: 向我申请提交本任务变更，提交信息为 `feat: add configuration loading`。
 
 ### Task 3: Prompt 模板加载与渲染
 
@@ -162,7 +160,7 @@
 - [ ] Step 5: 实现 Prompt 模板读取、必需变量校验和渲染。
 - [ ] Step 6: 创建默认 Prompt，表达“严格基于检索内容回答；检索内容不足时说明无法从资料中确定”。
 - [ ] Step 7: 运行 `pytest tests/unit/test_prompts.py -v`，确认通过。
-- [ ] Step 8: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add prompt template handling`。
+- [ ] Step 8: 提交本任务变更，提交信息为 `feat: add prompt template handling`。
 
 ### Task 4: 文档扫描与切分
 
@@ -197,7 +195,7 @@
 - [ ] Step 8: 实现递归扫描、稳定排序、UTF-8 文本读取与 LangChain Document 转换。
 - [ ] Step 9: 接入 Markdown header splitter，并写入 chunk metadata。
 - [ ] Step 10: 运行 `pytest tests/unit/test_document_processor.py -v`，确认通过。
-- [ ] Step 11: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add markdown document processing`。
+- [ ] Step 11: 提交本任务变更，提交信息为 `feat: add markdown document processing`。
 
 ### Task 5: Embedding 加载与 FAISS 索引生命周期
 
@@ -243,7 +241,7 @@
 - [ ] Step 11: 编写第二次启动集成测试，验证索引未过期时直接加载。
 - [ ] Step 12: 编写源文件 mtime 更新集成测试，验证触发重建。
 - [ ] Step 13: 运行 `pytest tests/unit/test_vectorstore.py tests/integration/test_index_lifecycle.py -v`，确认通过。
-- [ ] Step 14: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add faiss index lifecycle`。
+- [ ] Step 14: 提交本任务变更，提交信息为 `feat: add faiss index lifecycle`。
 
 ### Task 6: 检索适配
 
@@ -272,7 +270,7 @@
 - [ ] Step 5: 运行 `pytest tests/unit/test_retriever.py -v`，确认由于实现尚未完成而失败。
 - [ ] Step 6: 实现检索包装和 debug 来源格式化。
 - [ ] Step 7: 运行 `pytest tests/unit/test_retriever.py -v`，确认通过。
-- [ ] Step 8: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add retriever adapter`。
+- [ ] Step 8: 提交本任务变更，提交信息为 `feat: add retriever adapter`。
 
 ### Task 7: DeepSeek OpenAI-compatible 生成适配
 
@@ -304,7 +302,7 @@
 - [ ] Step 8: 实现流式与非流式生成路径。
 - [ ] Step 9: 实现失败包装和 debug 信息保留。
 - [ ] Step 10: 运行 `pytest tests/unit/test_generator.py -v`，确认通过。
-- [ ] Step 11: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add deepseek generator adapter`。
+- [ ] Step 11: 提交本任务变更，提交信息为 `feat: add deepseek generator adapter`。
 
 ### Task 8: RagService 主流程编排
 
@@ -352,7 +350,7 @@
 - [ ] Step 11: 实现 `RagService.ask()`。
 - [ ] Step 12: 实现 `RagService.shutdown()` 与 `ask_once()`。
 - [ ] Step 13: 运行 `pytest tests/integration/test_rag_service.py -v`，确认通过。
-- [ ] Step 14: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add rag service orchestration`。
+- [ ] Step 14: 提交本任务变更，提交信息为 `feat: add rag service orchestration`。
 
 ### Task 9: CLI 交互入口
 
@@ -389,7 +387,7 @@
 - [ ] Step 9: 实现交互式问答循环。
 - [ ] Step 10: 实现流式覆盖、debug 覆盖、空输入处理和退出处理。
 - [ ] Step 11: 运行 `pytest tests/unit/test_cli.py -v`，确认通过。
-- [ ] Step 12: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add interactive cli`。
+- [ ] Step 12: 提交本任务变更，提交信息为 `feat: add interactive cli`。
 
 ### Task 10: 评测扩展骨架
 
@@ -420,7 +418,7 @@
 - [ ] Step 4: 运行 `pytest tests/unit/test_evaluation_skeleton.py -v`，确认由于评测骨架尚未实现而失败。
 - [ ] Step 5: 实现评测骨架异常和三个显式不可用接口。
 - [ ] Step 6: 运行 `pytest tests/unit/test_evaluation_skeleton.py -v`，确认通过。
-- [ ] Step 7: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `feat: add evaluation extension skeleton`。
+- [ ] Step 7: 提交本任务变更，提交信息为 `feat: add evaluation extension skeleton`。
 
 ### Task 11: 全链路集成、运行文档与人工验收
 
@@ -460,7 +458,7 @@
 - [ ] Step 16: 输入一个 `data/cook` 可回答的问题，确认能构建或加载索引、检索、调用 DeepSeek 并输出回答。
 - [ ] Step 17: 输入空行，确认不会退出并提示重新输入。
 - [ ] Step 18: 输入 `q`，确认程序正常退出。
-- [ ] Step 19: 如当前目录是 git 仓库，提交本任务变更，提交信息为 `docs: add rag runtime and acceptance notes`。
+- [ ] Step 19: 提交本任务变更，提交信息为 `docs: add rag runtime and acceptance notes`。
 
 ## Self-Review
 
@@ -474,4 +472,4 @@
 
 **Type/interface consistency:** `RagService`、`AppConfig`、`RetrievedChunk`、`DeepSeekGenerator`、`IndexStatus`、评测骨架接口在任务间命名一致，后续任务只消费前序任务定义的接口。
 
-**Known repository state:** 之前在 `E:\007.agent\007.project\RAG` 执行 `git status --short` 显示当前目录不是 git 仓库。实施 commit 步骤前，需要确认是否初始化 git 或切换到正确仓库根目录。
+**Known repository state:** 当前 `E:\007.agent\007.project\RAG` 已可正常执行 `git status --short`，计划中的提交步骤可按任务边界执行。提交前仍需检查工作区，避免混入与当前任务无关的改动。

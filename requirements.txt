@@ -1,0 +1,5 @@
+python-dotenv
+PyYAML
+pydantic
+pytest
+pytest-cov
