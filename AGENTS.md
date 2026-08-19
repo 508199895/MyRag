@@ -2,7 +2,7 @@
 
 ## 项目身份
 
-这是一个通用 RAG 框架项目，第一版目标是用 Python 3.13、LangChain、FAISS、本地 Embedding 与 DeepSeek OpenAI-compatible API，实现本地 Markdown/TXT 文档库的交互式问答。当前仓库主要处于“规格、计划、数据已准备，源码待实现”的阶段。与用户交流时始终使用简体中文。
+这是一个通用 RAG 框架项目，第一版目标是用 Python 3.13、LangChain、FAISS、本地 Embedding 与 DeepSeek OpenAI-compatible API，实现本地 Markdown/TXT 文档库的交互式问答。当前仓库已经完成项目骨架、配置模板、配置加载模块和对应单元测试；RAG 主链路仍待实现。与用户交流时始终使用简体中文。
 
 ## 目录地图（救命用）
 
@@ -11,7 +11,7 @@
 - `docs/note/`：用户笔记。除非用户明确要求，不必读取。
 - `data/cook/`：第一版可用的 Markdown 文档库来源。
 - `data/BEIR-NQ/`、`data/hotpot_qa/`、`data/rag-qa-arena/`、`data/squad2/`：后续评测数据集，第一版不接入主流程。
-- `test/`：当前是探索性 notebook，不是正式 pytest 目录。
+- `experiments/`：探索性 notebook 目录，历史上的 `test/` notebook 已迁移到这里。
 - 目标结构：`src/` 放应用代码，`tests/` 放自动化测试，`tests/fixtures/` 放小型测试样本，`docs/prompts/` 放 Prompt 模板，`experiments/` 放 notebook。
 
 ## 代码风格与约定
@@ -44,6 +44,7 @@ act pull_request -W .github\workflows\ci.yml -j test -s DEEPSEEK_API_KEY=dummy
 先看哪一步挂的，贴出失败日志
 不要"猜测式修复"—先复现再修
 修完之后本地跑一次 `make ci-local` 再 push
+3. Git 提交前必须明确向用户请求权限，并在用户同意后再执行 `git commit`；不要私自提交。
 
 ## 红线
 
@@ -51,4 +52,4 @@ act pull_request -W .github\workflows\ci.yml -j test -s DEEPSEEK_API_KEY=dummy
 
 ## 历史教训
 
-当前目录不是 Git 仓库，计划里的提交步骤执行前必须先确认仓库状态。PowerShell 默认输出可能把中文读成乱码，读取中文 Markdown 时使用 UTF-8。不要每次都读 `docs/spec.md` 和实现计划；仅在涉及功能范围、架构或用户明确指定时读取。第一版只交付本地 Markdown/TXT RAG 主链路，评测相关模块只保留骨架并明确报“不支持”。
+当前目录已经是 Git 仓库，执行提交、分支或工作区相关操作前仍必须先确认仓库状态。PowerShell 默认输出可能把中文读成乱码，读取中文 Markdown 时使用 UTF-8。不要每次都读 `docs/spec.md` 和实现计划；仅在涉及功能范围、架构或用户明确指定时读取。第一版只交付本地 Markdown/TXT RAG 主链路，评测相关模块只保留骨架并明确报“不支持”。
