@@ -24,17 +24,22 @@ def test_default_prompt_template_exists_and_contains_required_variables() -> Non
 
 
 @pytest.mark.parametrize(
-    "template",
-    ["用户问题：{question}", "检索内容：{context}"],
+    ("template", "missing_variable"),
+    [
+        ("用户问题：{question}", "context"),
+        ("检索内容：{context}", "question"),
+    ],
 )
 def test_load_prompt_template_rejects_missing_required_variable(
-    tmp_path: Path, template: str
+    tmp_path: Path, template: str, missing_variable: str
 ) -> None:
     prompt_path = tmp_path / "prompt.md"
     prompt_path.write_text(template, encoding="utf-8")
 
-    with pytest.raises(PromptTemplateError):
+    with pytest.raises(PromptTemplateError) as exc_info:
         load_prompt_template(prompt_path)
+
+    assert missing_variable in str(exc_info.value)
 
 
 def test_load_prompt_template_reports_missing_file_path(tmp_path: Path) -> None:
@@ -44,6 +49,24 @@ def test_load_prompt_template_reports_missing_file_path(tmp_path: Path) -> None:
         load_prompt_template(prompt_path)
 
     assert str(prompt_path) in str(exc_info.value)
+
+
+def test_load_prompt_template_wraps_decode_error(tmp_path: Path) -> None:
+    prompt_path = tmp_path / "invalid-utf8.md"
+    prompt_path.write_bytes(b"\xff")
+
+    with pytest.raises(PromptTemplateError) as exc_info:
+        load_prompt_template(prompt_path)
+
+    assert str(prompt_path) in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "template", ["{context.foo} {question}", "{context} {question[0]}"]
+)
+def test_render_prompt_rejects_unsupported_field_access(template: str) -> None:
+    with pytest.raises(PromptTemplateError):
+        render_prompt(template, context="资料", question="问题")
 
 
 def test_render_prompt_injects_context_and_question() -> None:

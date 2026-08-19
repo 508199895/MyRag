@@ -63,3 +63,43 @@ collected 5 items
 
 - 当前 `pytest` 不在系统 PATH 中，验证使用仓库内置环境 `ENV\\RAG_2026` 的 Python 3.13 与 pytest；功能测试和全量测试均已通过。
 - 未执行 `make ci-local`，因为本任务验收范围要求的目标测试及相关已有测试已完成，且当前实现没有新增依赖或 CI 配置变化。
+
+## Fix Round 1
+
+### 修复内容
+
+- `load_prompt_template` 现在同时捕获 `OSError` 和 `UnicodeError`，非 UTF-8 模板会统一转换为包含模板路径的 `PromptTemplateError`。
+- 模板字段校验现在只允许精确的 `context` 和 `question`，拒绝 `{context.foo}`、`{question[0]}` 等属性或索引访问；渲染阶段也补充包装 `AttributeError` 和 `TypeError`。
+- 为缺失变量错误补充了消息内容断言，并新增非 UTF-8 模板、属性字段和索引字段的回归测试。
+
+### 覆盖测试
+
+命令：`ENV\\RAG_2026\\python.exe -m pytest tests/unit/test_prompts.py -v`
+
+输出：
+
+```text
+collected 8 items
+8 passed in 0.06s
+```
+
+全量回归命令：`ENV\\RAG_2026\\python.exe -m pytest tests -q`
+
+输出：`27 passed in 0.21s`。
+
+### TDD Evidence
+
+新增回归测试先于实现运行，RED 输出为 3 个失败：
+
+```text
+test_load_prompt_template_wraps_decode_error FAILED
+test_render_prompt_rejects_unsupported_field_access[{context.foo} {question}] FAILED
+test_render_prompt_rejects_unsupported_field_access[{context} {question[0]}] FAILED
+```
+
+修复后同一目标命令 GREEN，8 项全部通过。`git diff --check` 通过；仅有 Git 关于工作区 LF/CRLF 转换的提示，无空白错误。
+
+### Fix Round 1 关注点
+
+- 变更保持在 Prompt 加载、校验、渲染及其单元测试范围内，未新增依赖。
+- 未运行 `make ci-local`；目标测试与全量 `tests` 回归均已通过。

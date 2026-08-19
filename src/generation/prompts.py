@@ -20,7 +20,7 @@ def load_prompt_template(path: str | Path = DEFAULT_PROMPT_PATH) -> str:
 
     try:
         template = prompt_path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise PromptTemplateError(f"无法读取 Prompt 模板 {prompt_path}：{exc}") from exc
 
     _validate_prompt_template(template, prompt_path)
@@ -32,20 +32,26 @@ def render_prompt(template: str, context: str, question: str) -> str:
     _validate_prompt_template(template)
     try:
         return template.format(context=context, question=question)
-    except (IndexError, KeyError, ValueError) as exc:
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
         raise PromptTemplateError(f"Prompt 模板渲染失败：{exc}") from exc
 
 
 def _validate_prompt_template(template: str, path: Path | None = None) -> None:
     try:
         variables = {
-            field_name.split(".", 1)[0].split("[", 1)[0]
+            field_name
             for _, field_name, _, _ in Formatter().parse(template)
             if field_name is not None and field_name
         }
     except ValueError as exc:
         location = f" {path}" if path is not None else ""
         raise PromptTemplateError(f"Prompt 模板{location}格式无效：{exc}") from exc
+
+    unsupported = variables - _REQUIRED_VARIABLES
+    if unsupported:
+        unsupported_names = "、".join(sorted(unsupported))
+        location = f" {path}" if path is not None else ""
+        raise PromptTemplateError(f"Prompt 模板{location}包含不支持的变量：{unsupported_names}")
 
     missing = _REQUIRED_VARIABLES - variables
     if missing:
