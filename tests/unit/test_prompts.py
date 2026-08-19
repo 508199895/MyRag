@@ -69,6 +69,22 @@ def test_render_prompt_rejects_unsupported_field_access(template: str) -> None:
         render_prompt(template, context="资料", question="问题")
 
 
+def test_render_prompt_wraps_format_error_after_validation_passes() -> None:
+    with pytest.raises(PromptTemplateError, match="渲染失败"):
+        render_prompt("{context:bad} {question}", context="资料", question="问题")
+
+
+def test_load_prompt_template_wraps_formatter_parse_error(tmp_path: Path) -> None:
+    prompt_path = tmp_path / "invalid-format.md"
+    prompt_path.write_text("检索内容：{context\n用户问题：{question}", encoding="utf-8")
+
+    with pytest.raises(PromptTemplateError) as exc_info:
+        load_prompt_template(prompt_path)
+
+    assert str(prompt_path) in str(exc_info.value)
+    assert "格式无效" in str(exc_info.value)
+
+
 def test_render_prompt_injects_context_and_question() -> None:
     rendered = render_prompt(
         "检索内容：{context}\n用户问题：{question}",
