@@ -22,6 +22,8 @@ Python 使用 4 空格缩进。函数、变量、模块名用 `snake_case`；类
 
 ## 命令清单
 
+本项目使用的 Python 虚拟环境位于 `E:\007.agent\007.project\RAG\ENV\RAG_2026`。该环境的 Python 解释器为 `E:\007.agent\007.project\RAG\ENV\RAG_2026\python.exe`。在运行 Python、pytest 或安装依赖前，优先使用该环境；PowerShell 下可用 `.\ENV\RAG_2026\Scripts\Activate.ps1` 激活。
+
 计划中的常用命令如下，部分命令需等源码骨架创建后才可运行：
 
 ```bash

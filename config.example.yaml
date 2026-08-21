@@ -1,13 +1,6 @@
-documents:
-  library_paths:
-    - data/cook
-  include_extensions:
-    - .md
-    - .txt
+data_path: data/cook
 
-index:
-  persist_dir: storage/faiss/default
-  rebuild_on_source_change: true
+index_save_path: storage/faiss/default
 
 splitter:
   type: markdown_header
@@ -18,11 +11,7 @@ splitter:
   strip_headers: false
 
 embedding:
-  provider: huggingface
   model_name: BAAI/bge-small-zh-v1.5
-  device: cpu
-  normalize_embeddings: true
-  query_instruction: "为这个句子生成表示以用于检索相关文章："
 
 retrieval:
   type: similarity
@@ -36,7 +25,3 @@ generation:
   prompt_template_path: docs/prompts/llm_generator.md
   temperature: 0.2
   max_tokens: 1024
-
-runtime:
-  stream: true
-  debug: false

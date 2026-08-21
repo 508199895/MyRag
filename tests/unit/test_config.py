@@ -5,24 +5,13 @@ import pytest
 from src.config import (
     ConfigError,
     MarkdownHeaderSplitterConfig,
-    MmrRetrievalConfig,
-    RecursiveCharacterSplitterConfig,
     SimilarityRetrievalConfig,
     load_config,
 )
 
-
 VALID_CONFIG = """
-documents:
-  library_paths:
-    - data/cook
-  include_extensions:
-    - .md
-    - .txt
-
-index:
-  persist_dir: storage/faiss/default
-  rebuild_on_source_change: true
+data_path: data/cook
+index_save_path: storage/faiss/default
 
 splitter:
   type: markdown_header
@@ -33,11 +22,7 @@ splitter:
   strip_headers: false
 
 embedding:
-  provider: huggingface
   model_name: BAAI/bge-small-zh-v1.5
-  device: cpu
-  normalize_embeddings: true
-  query_instruction: "为这个句子生成表示以用于检索相关文章："
 
 retrieval:
   type: similarity
@@ -51,10 +36,6 @@ generation:
   prompt_template_path: docs/prompts/llm_generator.md
   temperature: 0.2
   max_tokens: 1024
-
-runtime:
-  stream: true
-  debug: false
 """
 
 
@@ -87,7 +68,7 @@ def test_load_config_requires_env_file(tmp_path, monkeypatch):
 def test_load_config_rejects_invalid_yaml(tmp_path, monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     config_path, env_path = write_valid_files(tmp_path)
-    config_path.write_text("documents: [\n", encoding="utf-8")
+    config_path.write_text("data_path: [\n", encoding="utf-8")
 
     with pytest.raises(ConfigError, match="不是有效的 YAML"):
         load_config(config_path=config_path, env_path=env_path)
@@ -104,24 +85,44 @@ def test_load_config_requires_yaml_mapping_root(tmp_path, monkeypatch, config_da
 
 
 @pytest.mark.parametrize(
-    "section",
+    "field",
     [
-        "documents",
-        "index",
+        "data_path",
+        "index_save_path",
         "splitter",
         "embedding",
         "retrieval",
         "generation",
-        "runtime",
     ],
 )
-def test_load_config_requires_top_level_sections(tmp_path, monkeypatch, section):
+def test_load_config_requires_top_level_fields(tmp_path, monkeypatch, field):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     config_path, env_path = write_valid_files(tmp_path)
-    config_data = VALID_CONFIG.replace(f"\n{section}:\n", f"\nmissing_{section}:\n", 1)
+    if field in {"data_path", "index_save_path"}:
+        config_data = VALID_CONFIG.replace(f"\n{field}: ", f"\nmissing_{field}: ", 1)
+    else:
+        config_data = VALID_CONFIG.replace(f"\n{field}:\n", f"\nmissing_{field}:\n", 1)
     config_path.write_text(config_data, encoding="utf-8")
 
-    with pytest.raises(ConfigError, match=f"(?s)config.yaml.*{section}"):
+    with pytest.raises(ConfigError, match=f"(?s)config.yaml.*{field}"):
+        load_config(config_path=config_path, env_path=env_path)
+
+
+@pytest.mark.parametrize(
+    "legacy_section",
+    [
+        "documents:\n  library_paths:\n    - data/cook\n",
+        "index:\n  persist_dir: storage/faiss/default\n",
+    ],
+)
+def test_load_config_rejects_legacy_documents_and_index_sections(
+    tmp_path, monkeypatch, legacy_section
+):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    config_path, env_path = write_valid_files(tmp_path)
+    config_path.write_text(VALID_CONFIG + f"\n{legacy_section}", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="Extra inputs are not permitted"):
         load_config(config_path=config_path, env_path=env_path)
 
 
@@ -148,74 +149,114 @@ def test_load_config_rejects_empty_deepseek_api_key(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("section", "original", "replacement"),
+    ("original", "replacement", "assertion"),
     [
-        ("splitter", "  type: markdown_header", "  type: hybrid"),
-        ("retrieval", "  type: similarity", "  type: hybrid"),
+        (
+            "  type: markdown_header",
+            "  type: recursive_character",
+            lambda config: config.splitter.type == "recursive_character",
+        ),
+        (
+            "  type: markdown_header",
+            "  type: markdown_header\n  custom_option: custom-value",
+            lambda config: config.splitter.custom_option == "custom-value",
+        ),
+        (
+            "  type: similarity",
+            "  type: mmr",
+            lambda config: config.retrieval.type == "mmr",
+        ),
+        (
+            "  type: similarity",
+            "  type: similarity\n  fetch_k: 20",
+            lambda config: config.retrieval.fetch_k == 20,
+        ),
+        (
+            "  model_name: BAAI/bge-small-zh-v1.5",
+            "  model_name: BAAI/bge-small-zh-v1.5\n  device: cpu",
+            lambda config: config.embedding.device == "cpu",
+        ),
+        (
+            "data_path: data/cook",
+            "data_path: ''",
+            lambda config: config.data_path == "",
+        ),
+        (
+            "index_save_path: storage/faiss/default",
+            "index_save_path: ''",
+            lambda config: config.index_save_path == "",
+        ),
+        (
+            "  model_name: BAAI/bge-small-zh-v1.5",
+            "  model_name: ''",
+            lambda config: config.embedding.model_name == "",
+        ),
+        ("  top_k: 4", "  top_k: 0", lambda config: config.retrieval.top_k == 0),
+        (
+            "  temperature: 0.2",
+            "  temperature: 3",
+            lambda config: config.generation.temperature == 3,
+        ),
+        (
+            "  max_tokens: 1024",
+            "  max_tokens: 0",
+            lambda config: config.generation.max_tokens == 0,
+        ),
     ],
 )
-def test_load_config_rejects_unknown_discriminated_union_type(tmp_path, monkeypatch, section, original, replacement):
+def test_load_config_accepts_type_valid_values_without_value_validation(
+    tmp_path, monkeypatch, original, replacement, assertion
+):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     config_path, env_path = write_valid_files(tmp_path)
-    config_data = VALID_CONFIG.replace(original, replacement, 1)
-    config_path.write_text(config_data, encoding="utf-8")
+    config_path.write_text(
+        VALID_CONFIG.replace(original, replacement, 1), encoding="utf-8"
+    )
 
-    with pytest.raises(ConfigError, match=f"(?s)config.yaml.*{section}.*type"):
+    config = load_config(config_path=config_path, env_path=env_path)
+
+    assert assertion(config)
+
+
+@pytest.mark.parametrize(
+    ("field_path", "original", "replacement", "reason"),
+    [
+        (
+            "embedding.model_name",
+            "  model_name: BAAI/bge-small-zh-v1.5",
+            "  model_name: 123",
+            "Input should be a valid string",
+        ),
+        (
+            "retrieval.top_k",
+            "  top_k: 4",
+            "  top_k: abc",
+            "Input should be a valid integer",
+        ),
+        (
+            "generation.temperature",
+            "  temperature: 0.2",
+            "  temperature: abc",
+            "Input should be a valid number",
+        ),
+    ],
+)
+def test_load_config_reports_field_and_raw_reason_for_type_errors(
+    tmp_path, monkeypatch, field_path, original, replacement, reason
+):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    config_path, env_path = write_valid_files(tmp_path)
+    config_path.write_text(
+        VALID_CONFIG.replace(original, replacement, 1), encoding="utf-8"
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
         load_config(config_path=config_path, env_path=env_path)
 
-
-def test_load_config_uses_splitter_type_to_validate_matching_params(tmp_path, monkeypatch):
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    config_path, env_path = write_valid_files(tmp_path)
-    config_data = VALID_CONFIG.replace(
-        """splitter:
-  type: markdown_header
-  headers_to_split_on:
-    - ["#", "h1"]
-    - ["##", "h2"]
-    - ["###", "h3"]
-  strip_headers: false
-""",
-        """splitter:
-  type: recursive_character
-  chunk_size: 800
-  chunk_overlap: 120
-""",
-    )
-    config_path.write_text(config_data, encoding="utf-8")
-
-    config = load_config(config_path=config_path, env_path=env_path)
-
-    assert isinstance(config.splitter, RecursiveCharacterSplitterConfig)
-    assert config.splitter.type == "recursive_character"
-    assert config.splitter.chunk_size == 800
-    assert config.splitter.chunk_overlap == 120
-
-
-def test_load_config_uses_retrieval_type_to_validate_matching_params(tmp_path, monkeypatch):
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    config_path, env_path = write_valid_files(tmp_path)
-    config_data = VALID_CONFIG.replace(
-        """retrieval:
-  type: similarity
-  top_k: 4
-""",
-        """retrieval:
-  type: mmr
-  top_k: 4
-  fetch_k: 20
-  lambda_mult: 0.5
-""",
-    )
-    config_path.write_text(config_data, encoding="utf-8")
-
-    config = load_config(config_path=config_path, env_path=env_path)
-
-    assert isinstance(config.retrieval, MmrRetrievalConfig)
-    assert config.retrieval.type == "mmr"
-    assert config.retrieval.top_k == 4
-    assert config.retrieval.fetch_k == 20
-    assert config.retrieval.lambda_mult == 0.5
+    error_message = str(exc_info.value)
+    assert field_path in error_message
+    assert reason in error_message
+    assert "当前值：" in error_message
 
 
 def test_load_config_returns_typed_app_config(tmp_path, monkeypatch):
@@ -224,10 +265,8 @@ def test_load_config_returns_typed_app_config(tmp_path, monkeypatch):
 
     config = load_config(config_path=config_path, env_path=env_path)
 
-    assert config.documents.library_paths == ["data/cook"]
-    assert config.documents.include_extensions == [".md", ".txt"]
-    assert config.index.persist_dir == "storage/faiss/default"
-    assert config.index.rebuild_on_source_change is True
+    assert config.data_path == "data/cook"
+    assert config.index_save_path == "storage/faiss/default"
     assert isinstance(config.splitter, MarkdownHeaderSplitterConfig)
     assert config.splitter.type == "markdown_header"
     assert config.splitter.headers_to_split_on == [
@@ -236,11 +275,7 @@ def test_load_config_returns_typed_app_config(tmp_path, monkeypatch):
         ("###", "h3"),
     ]
     assert config.splitter.strip_headers is False
-    assert config.embedding.provider == "huggingface"
     assert config.embedding.model_name == "BAAI/bge-small-zh-v1.5"
-    assert config.embedding.device == "cpu"
-    assert config.embedding.normalize_embeddings is True
-    assert config.embedding.query_instruction == "为这个句子生成表示以用于检索相关文章："
     assert isinstance(config.retrieval, SimilarityRetrievalConfig)
     assert config.retrieval.type == "similarity"
     assert config.retrieval.top_k == 4
@@ -251,5 +286,3 @@ def test_load_config_returns_typed_app_config(tmp_path, monkeypatch):
     assert config.generation.prompt_template_path == "docs/prompts/llm_generator.md"
     assert config.generation.temperature == 0.2
     assert config.generation.max_tokens == 1024
-    assert config.runtime.stream is True
-    assert config.runtime.debug is False

@@ -8,7 +8,6 @@ from src.generation.prompts import (
     render_prompt,
 )
 
-
 DEFAULT_PROMPT_PATH = Path("docs/prompts/llm_generator.md")
 
 

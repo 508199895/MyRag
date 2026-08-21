@@ -204,7 +204,7 @@ load_config(config_path="config.yaml")
 
 职责：
 
-- 根据 `documents.library_paths` 扫描源文档。
+- 根据 `data_path` 扫描源文档。
 - 只处理 `.md` 和 `.txt`。
 - 读取文件内容并转为 LangChain `Document`。
 - 使用配置指定的 `MarkdownHeaderTextSplitter` 切分文本。
@@ -215,7 +215,7 @@ load_config(config_path="config.yaml")
 chunk metadata 至少包括：
 
 - `source`：源文件路径。
-- `chunk_id`：文档内 chunk 序号。
+- `chunk_id`：全局 chunk 序号。
 - `mtime`：源文件修改时间。
 - header/title 信息：由 Markdown header splitter 产生或整理。
 
@@ -298,21 +298,13 @@ deepseek-v4-flash
 
 ### 6.1 `config.yaml`
 
-`config.yaml` 位于项目根目录，是运行配置，可以提交 git，但不得包含 API Key、个人本地路径或其他敏感信息。密钥必须通过 `.env` 或环境变量提供。
+`config.yaml` 位于项目根目录，是运行配置，可以提交 git，但不得包含 API Key、个人本地路径或其他敏感信息。`.env` 文件必须存在，密钥默认从 `.env` 读取；如果系统环境变量中已经存在同名密钥，则系统环境变量可以覆盖 `.env` 中的值。
 
 推荐结构：
 
 ```yaml
-documents:
-  library_paths:
-    - data/cook
-  include_extensions:
-    - .md
-    - .txt
-
-index:
-  persist_dir: storage/faiss/default
-  rebuild_on_source_change: true
+data_path: data/cook
+index_save_path: storage/faiss/default
 
 splitter:
   type: markdown_header
@@ -323,11 +315,7 @@ splitter:
   strip_headers: false
 
 embedding:
-  provider: huggingface
   model_name: BAAI/bge-small-zh-v1.5
-  device: cpu
-  normalize_embeddings: true
-  query_instruction: "为这个句子生成表示以用于检索相关文章："
 
 retrieval:
   type: similarity
@@ -341,11 +329,9 @@ generation:
   prompt_template_path: docs/prompts/llm_generator.md
   temperature: 0.2
   max_tokens: 1024
-
-runtime:
-  stream: true
-  debug: false
 ```
+
+第一版配置模型只校验字段类型，不校验字段值范围；除 `splitter`、`embedding` 与 `retrieval` 可保留后续链路扩展字段外，其余配置段拒绝未声明字段。`splitter.headers_to_split_on` 与 `splitter.strip_headers` 在示例配置中保留用于后续接入，字段非必填。
 
 ### 6.2 `.env`
 
@@ -372,6 +358,8 @@ config.example.yaml
 .env
 ```
 
+配置校验在启动阶段完成。第一版配置模型只校验字段类型，不校验字段值范围；字段含义通过 `Field` 描述表达。配置类型错误需要说明字段、错误原因和当前值。
+
 ## 7. 版本控制与忽略规则
 
 当前项目目录已经是 Git 仓库。项目应通过 Git 管理源码、文档、测试、配置模板和 Prompt 模板，但必须避免提交本地敏感配置、索引产物、虚拟环境和缓存。
@@ -390,7 +378,7 @@ config.example.yaml
 不应提交到 Git 的内容：
 
 - `.env`。
-- `index.persist_dir` 指向的 FAISS 索引目录，例如 `storage/faiss/`。
+- `index_save_path` 指向的 FAISS 索引目录，例如 `storage/faiss/`。
 - LangChain FAISS 产物：`index.faiss`、`index.pkl`。
 - 虚拟环境目录，包括项目内残留 venv 或其他本地环境目录。
 - Python 缓存目录，例如 `__pycache__/`、`.pytest_cache/`。
@@ -448,7 +436,7 @@ debug 模式行为：
 - 显示检索来源。
 - 显示 chunk id 和相似度分数。
 - 索引过期时询问用户是否重建。
-- LLM API 调用失败时显示更具体的异常信息。
+- LLM API 调用失败时同样只显示面向用户的统一失败信息。
 
 非 debug 模式行为：
 
@@ -465,13 +453,13 @@ python -m src
 → 读取 config.yaml
 → 加载 .env
 → 初始化 RagService
-→ 检查 index.persist_dir 是否存在
-→ 检查 index.persist_dir/index.faiss 与 index.persist_dir/index.pkl 是否存在
+→ 检查 index_save_path 是否存在
+→ 检查 index_save_path/index.faiss 与 index_save_path/index.pkl 是否存在
 ```
 
 索引判断：
 
-- 如果 `index.persist_dir` 不存在，索引不可用，进入构建流程。
+- 如果 `index_save_path` 不存在，索引不可用，进入构建流程。
 - 如果 `index.faiss` 或 `index.pkl` 任一缺失，索引不可用，进入构建流程。
 - 如果两个索引文件都存在，再扫描源文档并执行过期检测。
 
@@ -487,23 +475,25 @@ else:
     索引可用
 ```
 
+第一版过期检测只比较 mtime，不记录 manifest 或文件 hash。因此删除、重命名源文件时，如果剩余源文件的最新 mtime 不晚于索引文件，可能无法触发索引过期；这类完整性检测留到后续 manifest/hash 扩展中处理。
+
 过期策略：
 
 - 非 debug 模式：自动重建索引。
-- debug 模式：询问用户是否重建。
+- debug 模式：询问用户是否重建；如果用户拒绝重建，则继续使用旧索引，并提示“当前回答可能基于过期索引”。
 - 第一版不做增量索引，源文件变化时整体重建。
 
 构建索引流程：
 
 ```text
-扫描 documents.library_paths 下的 .md/.txt
+扫描 data_path 下的 .md/.txt
 → 读取文档内容
 → 转为 LangChain Document
 → 使用 MarkdownHeaderTextSplitter 切分
 → 添加 chunk metadata
 → 使用 BAAI/bge-small-zh-v1.5 生成向量
 → 构建 LangChain FAISS vectorstore
-→ 保存到 index.persist_dir
+→ 保存到 index_save_path
 → 生成 index.faiss + index.pkl
 ```
 
@@ -562,7 +552,7 @@ generation:
 
 启动时需要校验模板文件存在，并校验必需变量存在。
 
-回答风格由模板决定。推荐模板表达“严格基于检索内容回答；检索内容不足时说明无法从资料中确定”，但第一版不在代码中写死回答风格。
+第一版拒绝 `{context}` 和 `{question}` 以外的额外变量。回答风格由模板决定。推荐模板表达“严格基于检索内容回答；检索内容不足时说明无法从资料中确定”，但第一版不在代码中写死回答风格。
 
 ## 12. 错误处理与边界情况
 
@@ -602,22 +592,26 @@ Prompt 变量不完整：
 文档库为空：
 
 - 如果没有可索引的 `.md` 或 `.txt` 文件，启动失败。
+- 如果 `.md` 或 `.txt` 文件内容为空或只包含空白，构建时跳过该文件，并打印固定警告：`数据库存在空文档：<path>`。
+- 如果跳过空白文档后没有任何有效 chunk，启动失败。
 
 源文件变更：
 
 - 按 mtime 检测。
 - 非 debug 模式自动重建。
 - debug 模式询问是否重建。
+- 第一版 mtime 检测不覆盖源文件删除或重命名导致的索引过期。
 
 Embedding 模型加载失败：
 
 - 启动失败。
-- 提示模型名、设备配置，以及可能需要先下载模型。
+- 提示模型名、设备配置，以及需要提前准备模型；程序不自动联网下载或安装依赖。
 
 FAISS 保存或加载失败：
 
 - 输出索引目录路径。
-- 提示可能需要删除损坏索引后重建。
+- 索引文件不完整时视为损坏并自动重建。
+- 索引文件完整但加载失败时启动失败，不自动覆盖，并打印失败原因。
 
 检索为空：
 
@@ -629,7 +623,7 @@ LLM API 调用失败：
 
 - 当前轮返回失败信息。
 - 程序继续运行。
-- debug 模式显示更具体的异常类型和响应状态码。
+- debug 模式同样返回统一失败信息，不额外显示异常类型或响应状态码。
 
 用户输入：
 
@@ -638,7 +632,7 @@ LLM API 调用失败：
 
 流式输出中断：
 
-- 输出回答生成中断或失败提示。
+- 保留已经输出的片段，追加“回答生成失败，请重试或检查配置/网络。”。
 - 回到下一轮提问。
 
 ## 13. 测试与验收标准

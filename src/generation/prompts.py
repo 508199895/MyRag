@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from string import Formatter
 
-
 DEFAULT_PROMPT_PATH = Path("docs/prompts/llm_generator.md")
 _REQUIRED_VARIABLES = {"context", "question"}
 
@@ -51,7 +50,9 @@ def _validate_prompt_template(template: str, path: Path | None = None) -> None:
     if unsupported:
         unsupported_names = "、".join(sorted(unsupported))
         location = f" {path}" if path is not None else ""
-        raise PromptTemplateError(f"Prompt 模板{location}包含不支持的变量：{unsupported_names}")
+        raise PromptTemplateError(
+            f"Prompt 模板{location}包含不支持的变量：{unsupported_names}"
+        )
 
     missing = _REQUIRED_VARIABLES - variables
     if missing:

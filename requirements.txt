@@ -3,3 +3,4 @@ PyYAML
 pydantic
 pytest
 pytest-cov
+ruff

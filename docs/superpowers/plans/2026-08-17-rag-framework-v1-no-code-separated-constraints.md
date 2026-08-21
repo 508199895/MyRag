@@ -119,16 +119,19 @@
 
 **Local Constraints:**
 - `config.yaml` 位于项目根目录，是运行配置，可以提交 git，但不得包含密钥或个人本地路径。
-- `.env` 位于项目根目录，只保存密钥，不提交 git。
+- `.env` 位于项目根目录，只保存密钥，不提交 git，文件必须存在；系统环境变量可以覆盖 `.env` 中的同名密钥值。
 - `config.example.yaml` 必须包含 spec 第 6.1 节推荐结构。
 - `.env.example` 必须包含 `DEEPSEEK_API_KEY=your-api-key`。
 - 缺少 `config.yaml` 时，启动失败并提示填写 `config.yaml`。
 - 缺少 `DEEPSEEK_API_KEY` 时，启动失败并提示填写 `.env`。
+- 第一版配置模型只校验字段类型，不校验字段值范围；字段含义通过 `Field` 描述表达。
+- `splitter`、`embedding` 与 `retrieval` 配置段允许额外字段，用于保留后续链路扩展能力；`splitter.headers_to_split_on` 与 `splitter.strip_headers` 在示例配置中保留，字段非必填。
+- 配置类型错误时统一包装为 `ConfigError`，错误信息至少包含字段路径、错误原因和当前值。
 
 - [ ] Step 1: 实现配置读取、环境变量读取和必需字段校验。
-- [ ] Step 2: 创建 `config.example.yaml`，字段覆盖文档库、索引、splitter、embedding、retrieval、generation、runtime。
+- [ ] Step 2: 创建 `config.example.yaml`，字段覆盖 `data_path`、`index_save_path`、splitter、embedding、retrieval、generation。
 - [ ] Step 3: 创建 `.env.example`。
-- [ ] Step 4: 创建配置缺失测试用例，覆盖根目录没有 `config.yaml`，以及 `config.yaml` 缺少 `documents`、`index`、`splitter`、`embedding`、`retrieval`、`generation`、`runtime` 任一 section 时给出清晰错误。
+- [ ] Step 4: 创建配置缺失测试用例，覆盖根目录没有 `config.yaml`，以及 `config.yaml` 缺少 `data_path`、`index_save_path`、`splitter`、`embedding`、`retrieval`、`generation` 任一必需字段时给出清晰错误。
 - [ ] Step 5: 创建密钥缺失测试用例，覆盖 `.env` 中没有 `DEEPSEEK_API_KEY` 时给出清晰错误。
 - [ ] Step 6: 创建 `test_config.py`，测试正常情况和边界情况。
 - [ ] Step 7: 运行 `pytest tests/unit/test_config.py -v`，确认通过。
@@ -150,6 +153,7 @@
 **Local Constraints:**
 - 默认 Prompt 路径为 `docs/prompts/llm_generator.md`。
 - Prompt 模板必须包含 `{context}` 和 `{question}`。
+- Prompt 模板拒绝 `{context}` 和 `{question}` 以外的额外变量。
 - Prompt 模板缺失时启动失败，并输出缺失路径。
 - Prompt 变量不完整时启动失败。
 - 回答风格由模板决定；第一版不在代码中写死回答风格。
@@ -181,10 +185,11 @@
 - 只处理 `.md` 和 `.txt`。
 - 第一版不提供 fallback splitter。
 - splitter 只支持配置指定的 `MarkdownHeaderTextSplitter`。
-- chunk metadata 至少包括 `source`、`chunk_id`、`mtime`。
+- chunk metadata 至少包括 `source`、`chunk_id`、`mtime`，其中 `chunk_id` 使用全局 chunk 序号。
 - header/title 信息由 Markdown header splitter 产生或整理后保留。
 - 文档库路径不存在时启动失败，并列出不存在路径。
 - 文档库为空时启动失败。
+- 空白 Markdown/TXT 文档构建时跳过，并打印固定警告：`数据库存在空文档：<path>`；如果最终没有有效 chunk，则启动失败。
 
 - [ ] Step 1: 在 `tests/fixtures/documents/` 准备最小 Markdown 与 TXT 测试样本。
 - [ ] Step 2: 编写扫描测试，覆盖 `.md` 和 `.txt` 被返回。
@@ -223,9 +228,11 @@
 - 支持向量归一化配置。
 - 支持 query instruction 配置。
 - LangChain FAISS 默认持久化文件为 `index.faiss` 和 `index.pkl`。
-- `index.persist_dir` 不存在时，索引不可用并进入构建流程。
+- `index_save_path` 不存在时，索引不可用并进入构建流程。
 - `index.faiss` 或 `index.pkl` 任一缺失时，索引不可用并进入构建流程。
 - 过期检测使用所有源文档最新 mtime 与两个索引文件较早 mtime 比较。
+- 第一版过期检测只按 mtime，不覆盖源文件删除或重命名导致的索引过期；manifest/hash 检测留到后续扩展。
+- 索引文件完整但加载失败时启动失败，不自动覆盖，并打印失败原因。
 - 非 debug 模式下索引缺失或过期自动构建或重建。
 - 第一版不做增量索引，源文件变化时整体重建。
 
@@ -291,13 +298,13 @@
 - 支持流式与非流式输出。
 - LLM API 调用失败时，当前轮返回失败信息，程序不退出。
 - 普通模式失败提示为面向用户的统一信息。
-- debug 模式需要能显示更具体的异常类型和响应状态码。
+- debug 模式同样返回统一失败信息，不额外显示异常类型或响应状态码。
 
 - [ ] Step 1: 编写非流式生成测试，覆盖返回完整回答文本。
 - [ ] Step 2: 编写流式生成测试，覆盖逐段输出文本。
 - [ ] Step 3: 编写 API 配置传递测试，覆盖 api key、base URL、模型名、temperature、max tokens。
 - [ ] Step 4: 编写 API 失败测试，覆盖异常被包装为生成失败错误。
-- [ ] Step 5: 编写 debug 错误信息测试，覆盖可读取具体异常类型或响应状态码。
+- [ ] Step 5: 编写 debug 错误信息测试，覆盖 debug 模式同样返回统一失败信息。
 - [ ] Step 6: 运行 `pytest tests/unit/test_generator.py -v`，确认由于实现尚未完成而失败。
 - [ ] Step 7: 实现 DeepSeek OpenAI-compatible client 初始化。
 - [ ] Step 8: 实现流式与非流式生成路径。
@@ -313,12 +320,12 @@
 
 **Interfaces:**
 - Consumes: `load_config(config_path="config.yaml", env_path=".env")`
-- Consumes: `scan_source_files(library_paths, include_extensions)`
+- Consumes: `scan_source_files([config.data_path], include_extensions)`
 - Consumes: `load_and_split_documents(files, splitter_config)`
 - Consumes: `create_embeddings(config)`
-- Consumes: `check_index_status(persist_dir, source_files)`
-- Consumes: `build_and_save_vectorstore(documents, embeddings, persist_dir)`
-- Consumes: `load_vectorstore(persist_dir, embeddings)`
+- Consumes: `check_index_status(config.index_save_path, source_files)`
+- Consumes: `build_and_save_vectorstore(documents, embeddings, config.index_save_path)`
+- Consumes: `load_vectorstore(config.index_save_path, embeddings)`
 - Consumes: `retrieve(vectorstore, question, top_k)`
 - Consumes: `load_prompt_template(path)`
 - Consumes: `render_prompt(template, context, question)`

@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      PYTHON: python
 
     steps:
       - name: Check out repository
@@ -30,9 +31,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run tests with coverage
-        run: |
-          python -m pytest tests -v --tb=short --cov=src --cov-report=term-missing --basetemp=.pytest_tmp
+      - name: Run local CI
+        run: make ci-local
 
       - name: Publish coverage summary
         if: always()
