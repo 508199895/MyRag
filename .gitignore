@@ -58,6 +58,7 @@ logs/
 *.log
 tmp/
 temp/
+outputs/
 
 # OS and editor files
 .DS_Store
