@@ -73,7 +73,11 @@ data/
   squad2/
 docs/
   note/
-  spec.md
+  superpowers/
+    specs/
+      spec-v1.md
+    plans/
+      plan-v1.md
   prompt_plan.md
   eval_plan.md
 experiments/
@@ -122,7 +126,11 @@ RAG/
 │  ├─ note/                        # 现有笔记
 │  ├─ prompts/
 │  │  └─ llm_generator.md          # 生成回答的 Prompt 模板
-│  ├─ spec.md                      # 本文件：整个项目 spec
+│  ├─ superpowers/
+│  │  ├─ specs/
+│  │  │  └─ spec-v1.md             # 本文件：第一版项目 spec
+│  │  └─ plans/
+│  │     └─ plan-v1.md             # 第一版实现计划
 │  ├─ prompt_plan.md               # 现有文档
 │  └─ eval_plan.md                 # 现有文档
 ├─ experiments/
@@ -368,7 +376,7 @@ config.example.yaml
 
 - `src/` 应用源码。
 - `tests/` 自动化测试。
-- `docs/spec.md`、`docs/prompts/llm_generator.md` 等项目文档和 Prompt 模板。
+- `docs/superpowers/specs/spec-v1.md`、`docs/superpowers/plans/plan-v1.md`、`docs/prompts/llm_generator.md` 等项目文档和 Prompt 模板。
 - `config.example.yaml`。
 - `config.yaml`，前提是不包含密钥或个人本地路径。
 - `.env.example`。

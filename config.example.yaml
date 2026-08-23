@@ -14,14 +14,23 @@ embedding:
   model_name: BAAI/bge-small-zh-v1.5
 
 retrieval:
-  type: similarity
-  top_k: 4
+  vector:
+    search_type: similarity
+    top_k: 5
+  bm25:
+    top_k: 5
+  hybrid:
+    top_k: 3
 
 generation:
   provider: openai_compatible
   base_url: https://api.deepseek.com
   model_name: deepseek-v4-flash
   api_key: $DEEPSEEK_API_KEY
-  prompt_template_path: docs/prompts/llm_generator.md
+  stream: true
   temperature: 0.2
   max_tokens: 1024
+  query_router_prompt_template_path: docs/prompts/query_router.md
+  query_rewrite_prompt_template_path: docs/prompts/query_rewrite.md
+  step_by_step_answer_prompt_template_path: docs/prompts/generate_step_by_step_answer.md
+  basic_answer_prompt_template_path: docs/prompts/generate_basic_answer.md

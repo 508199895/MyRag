@@ -38,7 +38,7 @@
 
 ## Scope Check
 
-`docs/spec.md` 同时描述第一版主链路与后续扩展方向。第一版可独立交付的软件是本地 Markdown/TXT 文档 RAG 查询，因此本计划只实现主链路、配置模板、测试体系、运行文档和评测模块骨架。后续数据集加载、检索评测、端到端 QA 评测、FastAPI、Web 页面、PDF/HTML 支持、增量索引、多 provider、日志系统不进入本次实现。
+`docs/superpowers/specs/spec-v1.md` 同时描述第一版主链路与后续扩展方向。第一版可独立交付的软件是本地 Markdown/TXT 文档 RAG 查询，因此本计划只实现主链路、配置模板、测试体系、运行文档和评测模块骨架。后续数据集加载、检索评测、端到端 QA 评测、FastAPI、Web 页面、PDF/HTML 支持、增量索引、多 provider、日志系统不进入本次实现。
 
 ## File Structure
 

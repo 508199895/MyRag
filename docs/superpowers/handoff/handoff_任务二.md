@@ -6,8 +6,8 @@
 
 主要依据：
 
-- 项目规格：`docs/spec.md`
-- 实现计划：`docs/superpowers/plans/2026-08-17-rag-framework-v1-no-code-separated-constraints.md`
+- 项目规格：`docs/superpowers/specs/spec-v1.md`
+- 实现计划：`docs/superpowers/plans/plan-v1.md`
 - 计划中的位置：`Task 2: 配置读取与模板文件`
 
 任务二当前目标：
