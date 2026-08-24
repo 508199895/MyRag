@@ -32,6 +32,9 @@ dist/
 # Jupyter checkpoints
 .ipynb_checkpoints/
 
+# Local model caches
+model/
+
 # RAG/vector index artifacts
 storage/
 faiss_index/
