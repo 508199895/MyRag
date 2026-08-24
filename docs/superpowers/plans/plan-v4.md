@@ -449,13 +449,11 @@ git commit -m "feat: add v4 prompts and generation module setup"
   - `split_documents() -> list[Document]`
   - `get_ranked_parent_docs(chunks: list[Document]) -> list[Document]`
 
-- [ ] **Step 1: Write failing loading and metadata tests**
+- [ ] **Step 1: Write failing loading, empty-library, metadata, and stability tests**
 
 Create `tests/unit/test_document_preparation.py`:
 
 ```python
-from pathlib import Path
-
 import pytest
 from langchain_core.documents import Document
 
@@ -464,6 +462,17 @@ from src.document_preparation.module import (
     DocumentPreparationError,
     DocumentPreparationModule,
 )
+
+
+REQUIRED_PARENT_METADATA = {
+    "parent_id",
+    "doc_type",
+    "source",
+    "category",
+    "dish_name",
+    "difficulty",
+}
+REQUIRED_CHUNK_METADATA = REQUIRED_PARENT_METADATA | {"chunk_id", "chunk_index"}
 
 
 def make_splitter_config() -> MarkdownHeaderSplitterConfig:
@@ -477,25 +486,43 @@ def make_splitter_config() -> MarkdownHeaderSplitterConfig:
 
 
 def test_load_documents_recurses_md_only_and_enhances_parent_metadata(tmp_path):
-    doc_path = tmp_path / "meat_dish" / "红烧肉.md"
-    doc_path.parent.mkdir(parents=True)
-    doc_path.write_text("# 红烧肉\n难度：★★★\n哨兵：糖色", encoding="utf-8")
-    (tmp_path / "meat_dish" / "ignore.txt").write_text("txt", encoding="utf-8")
+    root_content = "# 根目录菜\n无星级"
     root_doc = tmp_path / "根目录菜.md"
-    root_doc.write_text("# 根目录菜\n无星级", encoding="utf-8")
+    root_doc.write_text(root_content, encoding="utf-8")
+
+    dessert_content = "# 双皮奶\n难度：★\n一级目录"
+    dessert_doc = tmp_path / "dessert" / "双皮奶.md"
+    dessert_doc.parent.mkdir(parents=True)
+    dessert_doc.write_text(dessert_content, encoding="utf-8")
+
+    aquatic_content = "# 红烧鲤鱼\n难度：★★★\n哨兵：糖色"
+    doc_path = tmp_path / "dishes" / "aquatic" / "红烧鲤鱼.md"
+    doc_path.parent.mkdir(parents=True)
+    doc_path.write_text(aquatic_content, encoding="utf-8")
+    (tmp_path / "dishes" / "aquatic" / "ignore.txt").write_text("txt", encoding="utf-8")
 
     module = DocumentPreparationModule(tmp_path, make_splitter_config())
     docs = module.load_documents()
 
-    assert len(docs) == 2
+    assert len(docs) == 3
     by_source = {doc.metadata["source"]: doc for doc in docs}
-    meat = by_source["meat_dish/红烧肉.md"].metadata
-    assert meat["doc_type"] == "parent"
-    assert meat["category"] == "荤菜"
-    assert meat["dish_name"] == "红烧肉"
-    assert meat["difficulty"] == "中等"
-    assert len(meat["parent_id"]) == 32
+    assert set(by_source) == {
+        "根目录菜.md",
+        "dessert/双皮奶.md",
+        "dishes/aquatic/红烧鲤鱼.md",
+    }
+
+    aquatic = by_source["dishes/aquatic/红烧鲤鱼.md"].metadata
+    assert by_source["dishes/aquatic/红烧鲤鱼.md"].page_content == aquatic_content
+    assert set(aquatic) >= REQUIRED_PARENT_METADATA
+    assert aquatic["doc_type"] == "parent"
+    assert aquatic["category"] == "水产"
+    assert aquatic["dish_name"] == "红烧鲤鱼"
+    assert aquatic["difficulty"] == "中等"
+    assert len(aquatic["parent_id"]) == 32
     assert by_source["根目录菜.md"].metadata["category"] == "未知"
+    assert by_source["根目录菜.md"].page_content == root_content
+    assert by_source["dessert/双皮奶.md"].metadata["category"] == "甜品"
 
 
 def test_load_documents_rejects_missing_data_path(tmp_path):
@@ -503,6 +530,96 @@ def test_load_documents_rejects_missing_data_path(tmp_path):
 
     with pytest.raises(DocumentPreparationError, match="路径不存在"):
         module.load_documents()
+
+
+def test_load_documents_rejects_library_without_markdown_files(tmp_path, capsys):
+    (tmp_path / "ignore.txt").write_text("not markdown", encoding="utf-8")
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+
+    with pytest.raises(DocumentPreparationError, match="文档库为空"):
+        module.load_documents()
+
+    assert "文档库为空" in capsys.readouterr().out
+
+
+def test_load_documents_skips_empty_and_whitespace_markdown_files(tmp_path, capsys):
+    empty_doc = tmp_path / "dishes" / "soup" / "空.md"
+    blank_doc = tmp_path / "dishes" / "soup" / "空白.md"
+    valid_doc = tmp_path / "dishes" / "soup" / "番茄蛋汤.md"
+    valid_doc.parent.mkdir(parents=True)
+    empty_doc.write_text("", encoding="utf-8")
+    blank_doc.write_text(" \n\t\n", encoding="utf-8")
+    valid_doc.write_text("# 番茄蛋汤\n难度：★★", encoding="utf-8")
+
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+    docs = module.load_documents()
+
+    assert [doc.metadata["source"] for doc in docs] == ["dishes/soup/番茄蛋汤.md"]
+    output = capsys.readouterr().out
+    assert "文档内容为空" in output
+    assert str(empty_doc) in output
+    assert str(blank_doc) in output
+
+
+def test_load_documents_rejects_when_all_markdown_files_are_empty(tmp_path, capsys):
+    empty_doc = tmp_path / "dishes" / "soup" / "空.md"
+    blank_doc = tmp_path / "dishes" / "soup" / "空白.md"
+    blank_doc.parent.mkdir(parents=True)
+    empty_doc.write_text("", encoding="utf-8")
+    blank_doc.write_text(" \n", encoding="utf-8")
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+
+    with pytest.raises(DocumentPreparationError, match="文档库为空"):
+        module.load_documents()
+
+    output = capsys.readouterr().out
+    assert "文档内容为空" in output
+    assert "文档库为空" in output
+
+
+@pytest.mark.parametrize(
+    ("stars", "expected"),
+    [
+        ("★", "非常简单"),
+        ("★★", "简单"),
+        ("★★★", "中等"),
+        ("★★★★", "困难"),
+        ("★★★★★", "非常困难"),
+        ("★★★★★★", "未知"),
+        ("", "未知"),
+    ],
+)
+def test_load_documents_maps_difficulty_from_first_star_run(tmp_path, stars, expected):
+    doc_path = tmp_path / "dishes" / "breakfast" / "测试菜.md"
+    doc_path.parent.mkdir(parents=True)
+    doc_path.write_text(f"# 测试菜\n难度：{stars}\n说明：无其他星级", encoding="utf-8")
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+
+    docs = module.load_documents()
+
+    assert docs[0].metadata["difficulty"] == expected
+
+
+def test_load_documents_maps_unknown_category_when_no_path_segment_matches(tmp_path):
+    doc_path = tmp_path / "dishes" / "unknown_label" / "神秘菜.md"
+    doc_path.parent.mkdir(parents=True)
+    doc_path.write_text("# 神秘菜\n难度：★", encoding="utf-8")
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+
+    docs = module.load_documents()
+
+    assert docs[0].metadata["category"] == "未知"
+
+
+def test_load_documents_generates_stable_parent_id_for_same_source(tmp_path):
+    doc_path = tmp_path / "dishes" / "aquatic" / "白灼虾.md"
+    doc_path.parent.mkdir(parents=True)
+    doc_path.write_text("# 白灼虾\n难度：★★", encoding="utf-8")
+    first = DocumentPreparationModule(tmp_path, make_splitter_config()).load_documents()
+    second = DocumentPreparationModule(tmp_path, make_splitter_config()).load_documents()
+
+    assert first[0].metadata["source"] == second[0].metadata["source"]
+    assert first[0].metadata["parent_id"] == second[0].metadata["parent_id"]
 ```
 
 - [ ] **Step 2: Run loading tests and verify they fail**
@@ -525,11 +642,41 @@ Implementation requirements:
 - Raise `DocumentPreparationError(f"路径不存在：{self.data_path}")` when `data_path` does not exist.
 - Raise `DocumentPreparationError("文档库为空")` when no Markdown files exist.
 - If all Markdown files are empty, raise `DocumentPreparationError("文档库为空")`.
+- Print `文档库为空` before raising when the effective Markdown document set is empty.
 - Compute `source` with `path.relative_to(data_path).as_posix()`.
 - Compute `parent_id` with `hashlib.md5(source.encode("utf-8")).hexdigest()`.
-- Infer `category` from the first source path segment and `CATEGORY_MAPPING`; root documents and unmapped categories become `未知`.
+- Infer `category` by checking whether any POSIX path segment in `source` matches a key in this exact `CATEGORY_MAPPING`; if a segment matches, use the mapped Chinese category. For example, `dishes/aquatic/白灼虾.md` and `dishes/aquatic/红烧鲤鱼.md` both produce `category="水产"` because the relative path contains the `aquatic` segment. Root documents, files whose path contains no mapping key segment, and unmapped categories become `未知`:
+
+```python
+CATEGORY_MAPPING = {
+    "meat_dish": "荤菜",
+    "vegetable_dish": "素菜",
+    "soup": "汤品",
+    "dessert": "甜品",
+    "breakfast": "早餐",
+    "staple": "主食",
+    "aquatic": "水产",
+    "condiment": "调料",
+    "drink": "饮品",
+}
+```
+
 - Infer `dish_name` from `Path(source).stem`.
-- Infer `difficulty` from the first consecutive `★+` match; 1-5 map to `DIFFICULTY_MAPPING`, anything else becomes `未知`.
+- Infer `difficulty` from the first consecutive `★+` match; 1-5 map to this exact `DIFFICULTY_MAPPING`, anything else becomes `未知`:
+
+```python
+DIFFICULTY_MAPPING = {
+    5: "非常困难",
+    4: "困难",
+    3: "中等",
+    2: "简单",
+    1: "非常简单",
+}
+```
+
+- Set parent metadata fields at minimum: `parent_id`、`doc_type`、`source`、`category`、`dish_name`、`difficulty`.
+- `load_documents()` must call `_enhance_metadata()` and return `self.documents`; `_enhance_metadata()` updates `self.documents` in place and returns `None`.
+- Do not maintain `parent_doc_map`; parent lookup for ranking can linearly scan `self.documents`.
 
 - [ ] **Step 4: Write failing chunk and parent ranking tests**
 
@@ -537,7 +684,7 @@ Add:
 
 ```python
 def test_split_documents_generates_child_metadata_and_map(tmp_path):
-    doc_path = tmp_path / "vegetable_dish" / "清炒菜心.md"
+    doc_path = tmp_path / "dishes" / "vegetable_dish" / "清炒菜心.md"
     doc_path.parent.mkdir(parents=True)
     doc_path.write_text("# 清炒菜心\n## 食材\n菜心\n## 做法\n快炒", encoding="utf-8")
     module = DocumentPreparationModule(tmp_path, make_splitter_config())
@@ -547,13 +694,44 @@ def test_split_documents_generates_child_metadata_and_map(tmp_path):
 
     assert parents
     assert chunks
-    first = chunks[0].metadata
-    assert first["doc_type"] == "child"
-    assert first["parent_id"] == parents[0].metadata["parent_id"]
-    assert first["chunk_index"] == 0
-    assert len(first["chunk_id"]) == 32
-    assert module.child_parent_map[first["chunk_id"]] == first["parent_id"]
+    assert len(module.child_parent_map) == len(chunks)
+    chunk_indexes = [chunk.metadata["chunk_index"] for chunk in chunks]
+    assert chunk_indexes == list(range(len(chunks)))
+    seen_chunk_ids = set()
+    for chunk in chunks:
+        metadata = chunk.metadata
+        assert set(metadata) >= REQUIRED_CHUNK_METADATA
+        assert metadata["doc_type"] == "child"
+        assert metadata["parent_id"] == parents[0].metadata["parent_id"]
+        assert len(metadata["chunk_id"]) == 32
+        assert metadata["chunk_id"] not in seen_chunk_ids
+        assert module.child_parent_map[metadata["chunk_id"]] == metadata["parent_id"]
+        seen_chunk_ids.add(metadata["chunk_id"])
     assert all(chunk.page_content.strip() for chunk in chunks)
+
+
+def test_split_documents_preserves_chunk_order_and_content_membership(tmp_path):
+    expected_chunks = [
+        "# 白灼虾\n\n简介：鲜虾快速汆烫，保留原味。",
+        "## 食材\n\n鲜虾、姜片、葱段。",
+        "## 做法\n\n水沸后下虾，变红后捞出。",
+        "## 蘸料\n\n生抽、香醋、姜末混合。",
+    ]
+    doc_path = tmp_path / "dishes" / "aquatic" / "白灼虾.md"
+    doc_path.parent.mkdir(parents=True)
+    doc_path.write_text("\n\n".join(expected_chunks), encoding="utf-8")
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+    module.load_documents()
+
+    chunks = module.split_documents()
+
+    assert [chunk.page_content.strip() for chunk in chunks] == expected_chunks
+    parent_content = module.documents[0].page_content
+    assert all(chunk.page_content.strip() in parent_content for chunk in chunks)
+    merged_chunks = "\n".join(chunk.page_content for chunk in chunks)
+    assert merged_chunks.index("简介：鲜虾快速汆烫") < merged_chunks.index("鲜虾、姜片")
+    assert merged_chunks.index("鲜虾、姜片") < merged_chunks.index("水沸后下虾")
+    assert merged_chunks.index("水沸后下虾") < merged_chunks.index("生抽、香醋")
 
 
 def test_get_ranked_parent_docs_orders_by_hit_count_then_first_position(tmp_path, capsys):
@@ -576,7 +754,7 @@ def test_get_ranked_parent_docs_orders_by_hit_count_then_first_position(tmp_path
 
 - [ ] **Step 5: Implement splitting and ranking**
 
-Use `langchain_text_splitters.MarkdownHeaderTextSplitter`. Defaults when config omits optional fields:
+Use `langchain_text_splitters.MarkdownHeaderTextSplitter`. Do not implement a fallback splitter. Defaults when config omits optional fields:
 
 ```python
 headers_to_split_on = [("#", "h1"), ("##", "h2"), ("###", "h3")]
@@ -588,6 +766,10 @@ For each chunk, inherit parent metadata, set `doc_type="child"`, set `chunk_inde
 ```python
 hashlib.md5(f"{parent_id}{chunk_index}".encode("utf-8")).hexdigest()
 ```
+
+`split_documents()` must preserve the splitter output order for each parent document. Each chunk's `page_content.strip()` must come from the original parent document content, and the same-position chunk content must match the expected split result in tests.
+
+If `split_documents()` is called with no effective parent documents, or if splitting produces no non-empty chunks, raise `DocumentPreparationError("文档库为空")`.
 
 `get_ranked_parent_docs()` must count valid parent hits, remember the first chunk position, ignore missing parents with a warning, and return parents sorted by `(-hit_count, first_position)`.
 
@@ -623,23 +805,23 @@ git commit -m "feat: add markdown document preparation module"
 **Interfaces:**
 - Consumes: `index_save_path: str | Path`, `embedding_config: EmbeddingConfig`, `chunks: list[Document]`
 - Produces:
+  - `IndexConstructionError`
   - `IndexConstructionModule.vectorstore`
   - `IndexConstructionModule._load_embedding_model()`
   - `IndexConstructionModule.load_index() -> bool`
   - `IndexConstructionModule.build_index(chunks: list[Document]) -> None`
   - `IndexConstructionModule.save_index() -> None`
 
-- [ ] **Step 1: Write failing unit tests for missing and incomplete index**
+- [ ] **Step 1: Write failing unit tests for index loading and construction boundaries**
 
 Create `tests/unit/test_indexing.py`:
 
 ```python
-from pathlib import Path
-
+import pytest
 from langchain_core.documents import Document
 
 from src.config import EmbeddingConfig
-from src.indexing.module import IndexConstructionModule
+from src.indexing.module import IndexConstructionError, IndexConstructionModule
 
 
 class DeterministicEmbeddings:
@@ -655,20 +837,103 @@ def make_embedding_config():
 
 
 def test_load_index_returns_false_when_index_dir_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(IndexConstructionModule, "_load_embedding_model", lambda self: DeterministicEmbeddings())
+    monkeypatch.setattr(
+        IndexConstructionModule,
+        "_load_embedding_model",
+        lambda self: DeterministicEmbeddings(),
+    )
     module = IndexConstructionModule(tmp_path / "missing", make_embedding_config())
 
     assert module.load_index() is False
 
 
-def test_load_index_returns_false_when_one_file_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(IndexConstructionModule, "_load_embedding_model", lambda self: DeterministicEmbeddings())
+def test_load_index_returns_false_when_index_files_are_incomplete(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        IndexConstructionModule,
+        "_load_embedding_model",
+        lambda self: DeterministicEmbeddings(),
+    )
     index_dir = tmp_path / "index"
     index_dir.mkdir()
     (index_dir / "index.faiss").write_bytes(b"not-real")
+
     module = IndexConstructionModule(index_dir, make_embedding_config())
 
     assert module.load_index() is False
+
+
+def test_load_index_returns_false_and_prints_message_when_faiss_load_fails(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        IndexConstructionModule,
+        "_load_embedding_model",
+        lambda self: DeterministicEmbeddings(),
+    )
+    index_dir = tmp_path / "index"
+    index_dir.mkdir()
+    (index_dir / "index.faiss").write_bytes(b"not-real")
+    (index_dir / "index.pkl").write_bytes(b"not-real")
+    module = IndexConstructionModule(index_dir, make_embedding_config())
+
+    assert module.load_index() is False
+    assert "索引加载失败，将重新构建索引。" in capsys.readouterr().out
+
+
+def test_build_index_uses_passed_chunks_without_loading_documents(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        IndexConstructionModule,
+        "_load_embedding_model",
+        lambda self: DeterministicEmbeddings(),
+    )
+    captured = {}
+
+    class FakeFAISS:
+        @staticmethod
+        def from_documents(chunks, embedding_model):
+            captured["chunks"] = chunks
+            captured["embedding_model"] = embedding_model
+            return "vectorstore"
+
+    monkeypatch.setattr("src.indexing.module.FAISS", FakeFAISS)
+    module = IndexConstructionModule(tmp_path / "index", make_embedding_config())
+    chunks = [Document(page_content="番茄炒蛋", metadata={"chunk_id": "c1", "parent_id": "p1"})]
+
+    module.build_index(chunks)
+
+    assert captured["chunks"] is chunks
+    assert captured["embedding_model"] is module.embedding_model
+    assert module.vectorstore == "vectorstore"
+
+
+def test_embedding_load_failure_mentions_model_name_and_reason(tmp_path, monkeypatch):
+    def fail_load(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("src.indexing.module.HuggingFaceEmbeddings", fail_load)
+
+    with pytest.raises(IndexConstructionError, match="fake-model.*boom"):
+        IndexConstructionModule(tmp_path / "index", make_embedding_config())
+
+
+def test_save_index_failure_mentions_index_save_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        IndexConstructionModule,
+        "_load_embedding_model",
+        lambda self: DeterministicEmbeddings(),
+    )
+
+    class BrokenVectorstore:
+        def save_local(self, path):
+            raise OSError("disk full")
+
+    module = IndexConstructionModule(tmp_path / "index", make_embedding_config())
+    module.vectorstore = BrokenVectorstore()
+
+    with pytest.raises(IndexConstructionError, match=f"{tmp_path / 'index'}.*disk full"):
+        module.save_index()
 ```
 
 - [ ] **Step 2: Run indexing unit tests and verify they fail**
@@ -683,7 +948,74 @@ Expected: FAIL because indexing module is not implemented.
 
 - [ ] **Step 3: Implement `IndexConstructionModule`**
 
-Implementation requirements:
+Create `src/indexing/__init__.py`:
+
+```python
+from src.indexing.module import IndexConstructionError, IndexConstructionModule
+
+__all__ = ["IndexConstructionError", "IndexConstructionModule"]
+```
+
+Create `src/indexing/module.py`:
+
+```python
+from pathlib import Path
+
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
+
+from src.config import EmbeddingConfig
+
+
+class IndexConstructionError(Exception):
+    """Raised when embedding or FAISS index construction cannot continue."""
+
+
+class IndexConstructionModule:
+    def __init__(self, index_save_path: str | Path, embedding_config: EmbeddingConfig):
+        self.index_save_path = Path(index_save_path)
+        self.embedding_config = embedding_config
+        self.embedding_model = self._load_embedding_model()
+        self.vectorstore = None
+
+    def _load_embedding_model(self):
+        try:
+            return HuggingFaceEmbeddings(model_name=self.embedding_config.model_name)
+        except Exception as exc:
+            raise IndexConstructionError(
+                f"Embedding 模型加载失败：{self.embedding_config.model_name}；原因：{exc}"
+            ) from exc
+
+    def load_index(self) -> bool:
+        faiss_file = self.index_save_path / "index.faiss"
+        pkl_file = self.index_save_path / "index.pkl"
+        if not faiss_file.is_file() or not pkl_file.is_file():
+            return False
+        try:
+            self.vectorstore = FAISS.load_local(
+                str(self.index_save_path),
+                self.embedding_model,
+                allow_dangerous_deserialization=True,
+            )
+        except Exception:
+            print("索引加载失败，将重新构建索引。")
+            return False
+        return True
+
+    def build_index(self, chunks: list[Document]) -> None:
+        self.vectorstore = FAISS.from_documents(chunks, self.embedding_model)
+
+    def save_index(self) -> None:
+        try:
+            self.vectorstore.save_local(str(self.index_save_path))
+        except Exception as exc:
+            raise IndexConstructionError(
+                f"FAISS 索引保存失败：{self.index_save_path}；原因：{exc}"
+            ) from exc
+```
+
+Implementation requirements reflected by the code above:
 
 - `__init__` stores `Path(index_save_path)`, loads embeddings through `_load_embedding_model()`, and sets `self.vectorstore = None`.
 - `_load_embedding_model()` uses `langchain_community.embeddings.HuggingFaceEmbeddings(model_name=self.embedding_config.model_name)`.
@@ -693,6 +1025,7 @@ Implementation requirements:
 - On load failure, print `索引加载失败，将重新构建索引。` and return `False`.
 - `build_index(chunks)` calls `FAISS.from_documents(chunks, self.embedding_model)`.
 - `save_index()` calls `self.vectorstore.save_local(str(self.index_save_path))`; save failure raises `IndexConstructionError` containing `index_save_path`.
+- Do not load Markdown files, read `data_path`, or apply document splitting inside this module.
 
 - [ ] **Step 4: Add integration test for real FAISS persistence with fake embeddings**
 
@@ -707,7 +1040,11 @@ from tests.unit.test_indexing import DeterministicEmbeddings
 
 
 def test_build_save_and_load_faiss_index(tmp_path, monkeypatch):
-    monkeypatch.setattr(IndexConstructionModule, "_load_embedding_model", lambda self: DeterministicEmbeddings())
+    monkeypatch.setattr(
+        IndexConstructionModule,
+        "_load_embedding_model",
+        lambda self: DeterministicEmbeddings(),
+    )
     config = EmbeddingConfig.model_validate({"model_name": "fake-model"})
     chunks = [Document(page_content="红烧肉", metadata={"chunk_id": "c1", "parent_id": "p1"})]
 
@@ -722,6 +1059,8 @@ def test_build_save_and_load_faiss_index(tmp_path, monkeypatch):
     assert second.load_index() is True
     assert second.vectorstore is not None
 ```
+
+Task 4 verifies the module-level contract for failed FAISS loading by returning `False` and printing the rebuild message. The end-to-end automatic rebuild flow after `load_index() is False` belongs to `RagService.build_knowledge_base()` in Task 7 and is covered by Task 8 integration tests.
 
 - [ ] **Step 5: Run indexing tests**
 

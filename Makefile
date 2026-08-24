@@ -1,5 +1,4 @@
 PYTHON ?= ./ENV/RAG_2026/python.exe
-PYTEST_BASETEMP ?= .pytest_tmp
 
 .PHONY: ci-local lint lint-fix format format-check test-unit test-integration test-e2e test-regression
 
@@ -19,8 +18,8 @@ format-check:
 	$(PYTHON) -m ruff format --check src tests
 
 test-unit:
-	$(PYTHON) -m pytest tests/unit/test_config.py -v --tb=short --cov=src.config --cov-branch --cov-report=term-missing --cov-fail-under=100 --basetemp=$(PYTEST_BASETEMP)
-	$(PYTHON) -m pytest tests/unit/test_prompts.py -v --cov=src.generation.prompts --cov-branch --cov-report=term-missing --cov-fail-under=100 --basetemp=$(PYTEST_BASETEMP)
+	$(PYTHON) -m pytest tests/unit/test_config.py -v --tb=short --cov=src.config --cov-branch --cov-report=term-missing --cov-fail-under=100
+	$(PYTHON) -m pytest tests/unit/test_prompts.py -v --cov=src.generation.prompts --cov-branch --cov-report=term-missing --cov-fail-under=100
 
 test-integration:
 	$(PYTHON) -c "from pathlib import Path; assert Path('tests/integration').is_dir()"

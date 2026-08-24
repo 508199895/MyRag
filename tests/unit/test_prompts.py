@@ -11,6 +11,29 @@ from src.generation.prompts import (
 DEFAULT_PROMPT_PATH = Path("docs/prompts/llm_generator.md")
 
 
+@pytest.mark.parametrize(
+    ("path", "required_variables"),
+    [
+        ("docs/prompts/query_router.md", ("{query}",)),
+        ("docs/prompts/query_rewrite.md", ("{query}",)),
+        (
+            "docs/prompts/generate_step_by_step_answer.md",
+            ("{question}", "{context}"),
+        ),
+        ("docs/prompts/generate_basic_answer.md", ("{question}", "{context}")),
+    ],
+)
+def test_v4_prompt_template_exists_and_contains_required_variables(
+    path: str, required_variables: tuple[str, ...]
+) -> None:
+    template_path = Path(path)
+
+    assert template_path.is_file()
+    content = template_path.read_text(encoding="utf-8")
+    for variable in required_variables:
+        assert variable in content
+
+
 def test_default_prompt_template_exists_and_contains_required_variables() -> None:
     assert DEFAULT_PROMPT_PATH.is_file()
 

@@ -20,6 +20,18 @@ Python 使用 4 空格缩进。函数、变量、模块名用 `snake_case`；类
 
 新增或修改 Markdown 文档时，正文默认使用简体中文；只有代码标识、命令、路径、依赖包名、提交信息等需要保留英文的内容可以使用英文。
 
+## 代码注释规范
+
+总原则：注释解释“为什么”，代码表达“做什么”。
+
+- 只添加有价值的注释。
+- 注释应解释代码无法自证的内容：业务意图、设计取舍、边界条件、外部约束、非直觉逻辑。
+- 不要写重复代码含义的注释，例如“遍历列表”“返回结果”“设置变量”。
+- 复杂函数、类、模块应添加简短 docstring，说明职责、输入、输出、异常或副作用。
+- 如果引入设计模式、抽象层、适配器、策略类、工厂类等，需要用一句话说明它解决的变化点或解耦问题。
+- 对临时兼容逻辑、TODO、workaround 必须说明原因、触发条件和后续处理方式。
+- 优先通过清晰命名、函数拆分和简单结构减少注释需求。
+
 ## 命令清单
 
 本项目使用的 Python 虚拟环境位于 `E:\007.agent\007.project\RAG\ENV\RAG_2026`。该环境的 Python 解释器为 `E:\007.agent\007.project\RAG\ENV\RAG_2026\python.exe`。在运行 Python、pytest 或安装依赖前，优先使用该环境；PowerShell 下可用 `.\ENV\RAG_2026\Scripts\Activate.ps1` 激活。
@@ -35,7 +47,7 @@ make format-check
 make ci-local
 python -m src
 pytest tests -v
-python -m pytest tests -v --tb=short --cov=src --cov-report=term-missing --basetemp=.pytest_tmp
+python -m pytest tests -v --tb=short --cov=src --cov-report=term-missing
 ```
 
 `python -m src` 启动连续问答 CLI。是否流式输出由 `config.yaml` 的 `generation.stream` 控制；第二版不提供 debug 模式。
@@ -58,6 +70,16 @@ python -m pytest tests -v --tb=short --cov=src --cov-report=term-missing --baset
 ## 测试原则
 
 每个模块测试不仅验证输出输出格式，还必须验证输出是否保持业务语义。
+
+## Pytest / 临时目录规则
+
+- 测试里统一使用 pytest 提供的 `tmp_path` 创建临时文件和临时目录。
+- 不要依赖类似 `temp/`、`tmp/`、`test_tmp/` 这种项目内固定目录。
+- 项目内如果确实需要样例数据，就放在 `tests/fixtures/`，并且只读使用。
+- 不得为了让测试通过而重命名、移动或新建项目级临时目录，除非用户明确要求。
+- 不得修改测试脚本来迁就错误的临时目录路径；除非测试脚本本身确有 bug，并且必须先说明原因。
+- 修复 pytest 临时目录相关失败时，应先定位 `cwd`、`PYTHONPATH`、fixture、`tmp_path` / `tmp_path_factory` / `monkeypatch.chdir` 的使用问题。
+- 修复后必须清理本次运行产生的项目内临时文件。
 
 ## 红线
 

@@ -310,7 +310,7 @@ child_parent_map: dict[str, str] # {chunk_id: parent_id}
 
 - `source`：相对 `data_path` 的规范化 POSIX 路径。
 - `parent_id`：对 `source` 使用 Python 标准库 `hashlib` 中的 MD5 哈希算法生成稳定父文档 ID。
-- `category`：取 `source` 的第一层目录名，并通过 `CATEGORY_MAPPING` 映射为标准类别；无法映射时设为 `未知`。如果 Markdown 直接位于 `data_path` 根目录，也设为 `未知`。
+- `category`：检查 `source` 的相对路径片段中是否包含 `CATEGORY_MAPPING` 的 key；如果包含，则取该 key 对应的标准中文类别。比如 `dishes/aquatic/白灼虾.md` 和 `dishes/aquatic/红烧鲤鱼.md` 的相对路径片段包含 `aquatic`，因此 `category="水产"`。如果没有任何路径片段能匹配 `CATEGORY_MAPPING`，则设为 `未知`。
 - `dish_name`：读取不带 `.md` 后缀的文件名。
 - `difficulty`：在全文中查找第一次连续出现的实心星号 `★`，根据星号数量映射难度。1-5 个星号使用 `DIFFICULTY_MAPPING`；超过 5 个星号或未匹配到星号时设为 `未知`。
 
@@ -919,7 +919,7 @@ tests/
 - 如果所有 `.md` 都为空或只包含空白，断言最终无有效父文档或 chunks 时启动失败。
 - 父文档 `page_content` 与源 Markdown 内容一致。
 - 能 enhance 父文档 metadata：`parent_id`、`doc_type`、`source`、`category`、`dish_name`、`difficulty`。
-- `CATEGORY_MAPPING` 能将固定目录名映射为标准类别，无法映射时为 `未知`。
+- `CATEGORY_MAPPING` 能根据相对路径片段中的固定类别 key 映射为标准中文类别；例如 `dishes/aquatic/白灼虾.md` 包含 `aquatic`，映射为 `水产`；无法映射时为 `未知`。
 - 根目录文档的 `category` 为 `未知`。
 - `difficulty` 能根据第一次连续 `★` 数量映射，超过 5 个或无匹配为 `未知`。
 - 同一 fixture 重复调用 `load_documents()` 时，`parent_id` 保持稳定。

@@ -69,3 +69,6 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+.pytest_tmp*/
+.tmp/
+test_tmp/
