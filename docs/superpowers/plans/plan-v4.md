@@ -1091,7 +1091,7 @@ git commit -m "feat: add faiss index construction module"
 - Test: `tests/unit/test_retrieval.py`
 
 **Interfaces:**
-- Consumes: `chunks: list[Document]`, `vectorstore`, `config: RetrievalConfig`
+- Consumes: `chunks: list[Document]`, `vectorstore`, `config: RetrievalConfig`（即 `AppConfig.retrieval` 子配置）
 - Produces:
   - `RetrievalModule._init_retrievers() -> None`
   - `RetrievalModule.vector_search(query: str) -> list[Document]`
@@ -1138,7 +1138,7 @@ def make_retrieval_config(vector_top_k=5, bm25_top_k=5, hybrid_top_k=3):
     )
 
 
-def test_vector_search_uses_configured_top_k():
+def test_vector_retriever_receives_configured_search_kwargs():
     docs = [Document(page_content="红烧肉", metadata={"chunk_id": "a"})]
     vectorstore = FakeVectorstore(docs)
     module = RetrievalModule(docs, vectorstore, make_retrieval_config(vector_top_k=5))
@@ -1146,6 +1146,16 @@ def test_vector_search_uses_configured_top_k():
     assert module.vector_search("红烧肉") == docs
     assert vectorstore.kwargs["search_type"] == "similarity"
     assert vectorstore.kwargs["search_kwargs"] == {"k": 5}
+
+
+def test_bm25_retriever_receives_configured_top_k():
+    docs = [
+        Document(page_content="红烧肉 炒糖色", metadata={"chunk_id": "a"}),
+        Document(page_content="清炒菜心 蒜蓉", metadata={"chunk_id": "b"}),
+    ]
+    module = RetrievalModule(docs, FakeVectorstore([]), make_retrieval_config(bm25_top_k=1))
+
+    assert module.bm25_retriever.k == 1
 
 
 def test_rrf_deduplicates_and_orders_by_score():
@@ -1173,6 +1183,7 @@ Expected: FAIL because retrieval module is not implemented.
 
 Implementation requirements:
 
+- The `config` parameter is `RetrievalConfig`, passed from `AppConfig.retrieval`; use `config.vector`、`config.bm25` and `config.hybrid` directly.
 - Use `vectorstore.as_retriever(search_type=config.vector.search_type, search_kwargs={"k": config.vector.top_k})`.
 - Use `langchain_community.retrievers.BM25Retriever.from_documents(chunks, preprocess_func=jieba.lcut)`.
 - Set `self.bm25_retriever.k = config.bm25.top_k`.
@@ -1198,6 +1209,17 @@ def test_hybrid_search_returns_empty_when_both_routes_empty(monkeypatch):
     monkeypatch.setattr(module, "bm25_search", lambda query: [])
 
     assert module.hybrid_search("什么都没有") == []
+
+
+def test_hybrid_search_truncates_to_hybrid_top_k(monkeypatch):
+    a = Document(page_content="a", metadata={"chunk_id": "a"})
+    b = Document(page_content="b", metadata={"chunk_id": "b"})
+    c = Document(page_content="c", metadata={"chunk_id": "c"})
+    module = RetrievalModule([a, b, c], FakeVectorstore([]), make_retrieval_config(hybrid_top_k=2))
+    monkeypatch.setattr(module, "vector_search", lambda query: [a, b])
+    monkeypatch.setattr(module, "bm25_search", lambda query: [c])
+
+    assert module.hybrid_search("红烧肉") == [a, c]
 ```
 
 - [ ] **Step 5: Run retrieval tests**
