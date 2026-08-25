@@ -323,8 +323,8 @@ def make_generation_config(tmp_path: Path, **overrides) -> GenerationConfig:
     prompts = {
         "query_router": "用户问题：{query}",
         "query_rewrite": "用户问题：{query}",
-        "step_by_step_answer": "用户问题：{question}\n检索内容：{context}",
-        "basic_answer": "用户问题：{question}\n检索内容：{context}",
+        "generate_step_by_step_answer": "用户问题：{question}\n检索内容：{context}",
+        "generate_basic_answer": "用户问题：{question}\n检索内容：{context}",
     }
     for name, content in prompts.items():
         prompt_path = tmp_path / f"{name}.md"
@@ -340,8 +340,10 @@ def make_generation_config(tmp_path: Path, **overrides) -> GenerationConfig:
         "max_tokens": 1024,
         "query_router_prompt_template_path": paths["query_router"],
         "query_rewrite_prompt_template_path": paths["query_rewrite"],
-        "step_by_step_answer_prompt_template_path": paths["step_by_step_answer"],
-        "basic_answer_prompt_template_path": paths["basic_answer"],
+        "step_by_step_answer_prompt_template_path": paths[
+            "generate_step_by_step_answer"
+        ],
+        "basic_answer_prompt_template_path": paths["generate_basic_answer"],
     }
     data.update(overrides)
     return GenerationConfig.model_validate(data)
@@ -389,7 +391,7 @@ class GenerationModuleError(Exception):
     """Raised when generation module setup or execution fails."""
 ```
 
-`GenerationModule.__init__` stores config, checks every prompt path, loads each as `ChatPromptTemplate.from_template(path.read_text(encoding="utf-8"))`, and stores them under keys `query_router`、`query_rewrite`、`step_by_step_answer`、`basic_answer`.
+`GenerationModule.__init__` stores config, checks every prompt path, loads each as `ChatPromptTemplate.from_template(path.read_text(encoding="utf-8"))`, and stores them under keys matching the four Prompt template filenames without `.md`: `query_router`、`query_rewrite`、`generate_step_by_step_answer`、`generate_basic_answer`.
 
 - [ ] **Step 6: Implement `setup_llm()` with LangChain Chat model**
 
@@ -1254,8 +1256,8 @@ git commit -m "feat: add hybrid retrieval module"
 - Produces:
   - `route_query(question: str) -> Literal["list", "detail", "general"]`
   - `rewrite_query(question: str) -> str`
-  - `build_context(docs: list[Document]) -> str`
-  - `generate_answer(question: str, intent: Literal["list", "detail", "general"], context: str, stream: bool, docs: list[Document] | None = None) -> str`
+  - `generate_answer(question: str, intent: Literal["list", "detail", "general"], docs: list[Document], stream: bool) -> str`
+  - Internal helper: `_build_context(docs: list[Document]) -> str`
 
 - [ ] **Step 1: Write failing behavior tests with fake LangChain chat model**
 
@@ -1273,14 +1275,17 @@ class FakeMessage:
 class FakeLlm:
     def __init__(self, outputs):
         self.outputs = list(outputs)
+        self.seen_messages = []
 
     def invoke(self, messages):
+        self.seen_messages.append(messages)
         value = self.outputs.pop(0)
         if isinstance(value, Exception):
             raise value
         return FakeMessage(value)
 
     def stream(self, messages):
+        self.seen_messages.append(messages)
         value = self.outputs.pop(0)
         if isinstance(value, Exception):
             raise value
@@ -1302,6 +1307,29 @@ def test_route_query_defaults_general_on_invalid_json(tmp_path):
     assert module.route_query("随便问") == "general"
 
 
+@pytest.mark.parametrize(
+    "router_output",
+    [
+        '{"intent": ""}',
+        '{"intent": "unknown"}',
+        '{"intent": 123}',
+    ],
+)
+def test_route_query_defaults_general_on_invalid_intent(tmp_path, router_output):
+    module = GenerationModule(make_generation_config(tmp_path))
+    module.llm = FakeLlm([router_output])
+
+    assert module.route_query("随便问") == "general"
+
+
+def test_route_query_defaults_general_on_llm_failure(tmp_path, capsys):
+    module = GenerationModule(make_generation_config(tmp_path))
+    module.llm = FakeLlm([RuntimeError("network")])
+
+    assert module.route_query("随便问") == "general"
+    assert "查询路由失败" in capsys.readouterr().out
+
+
 def test_rewrite_query_falls_back_to_original_question(tmp_path, capsys):
     module = GenerationModule(make_generation_config(tmp_path))
     module.llm = FakeLlm([RuntimeError("network")])
@@ -1310,8 +1338,9 @@ def test_rewrite_query_falls_back_to_original_question(tmp_path, capsys):
     assert "查询优化失败" in capsys.readouterr().out
 
 
-def test_build_context_uses_ranked_parent_documents(tmp_path):
+def test_generate_answer_builds_context_from_parent_documents(tmp_path):
     module = GenerationModule(make_generation_config(tmp_path))
+    module.llm = FakeLlm(["回答"])
     docs = [
         Document(
             page_content="制作步骤",
@@ -1324,37 +1353,54 @@ def test_build_context_uses_ranked_parent_documents(tmp_path):
         )
     ]
 
-    context = module.build_context(docs)
+    answer = module.generate_answer("怎么做红烧肉", "detail", docs, stream=False)
 
-    assert "[文档1]" in context
-    assert "菜名：红烧肉" in context
-    assert "类别：荤菜" in context
-    assert "难度：中等" in context
-    assert "来源：meat_dish/红烧肉.md" in context
-    assert "内容：\n制作步骤" in context
+    assert answer == "回答"
+    messages = module.llm.seen_messages[-1]
+    rendered = "\n".join(message.content for message in messages)
+    assert "[文档1]" in rendered
+    assert "菜名：红烧肉" in rendered
+    assert "类别：荤菜" in rendered
+    assert "难度：中等" in rendered
+    assert "来源：meat_dish/红烧肉.md" in rendered
+    assert "内容：\n制作步骤" in rendered
 
 
 def test_generate_answer_selects_prompt_and_returns_content(tmp_path):
     module = GenerationModule(make_generation_config(tmp_path))
     module.llm = FakeLlm(["回答"])
 
-    assert module.generate_answer("问题", "detail", "上下文", stream=False) == "回答"
+    assert module.generate_answer("问题", "detail", [], stream=False) == "回答"
 
 
-def test_generate_answer_formats_list_without_calling_llm(tmp_path):
+def test_generate_answer_formats_deduplicated_list_without_calling_llm(tmp_path):
     module = GenerationModule(make_generation_config(tmp_path))
     module.llm = FakeLlm([RuntimeError("list should not call llm")])
     docs = [
         Document(page_content="a", metadata={"dish_name": "西红柿炒鸡蛋"}),
         Document(page_content="b", metadata={"dish_name": "凉拌黄瓜"}),
-        Document(page_content="c", metadata={"dish_name": "紫菜蛋花汤"}),
+        Document(page_content="c", metadata={"dish_name": "西红柿炒鸡蛋"}),
+        Document(page_content="d", metadata={"dish_name": "紫菜蛋花汤"}),
     ]
 
-    assert module.generate_answer("推荐几个菜", "list", "上下文", stream=False, docs=docs) == (
+    assert module.generate_answer("推荐几个菜", "list", docs, stream=False) == (
         "为您推荐以下菜品：\n"
         "1. 西红柿炒鸡蛋\n"
         "2. 凉拌黄瓜\n"
         "3. 紫菜蛋花汤"
+    )
+
+
+def test_generate_answer_returns_error_when_list_docs_have_no_dish_name(tmp_path):
+    module = GenerationModule(make_generation_config(tmp_path))
+    module.llm = FakeLlm([RuntimeError("list should not call llm")])
+    docs = [
+        Document(page_content="a", metadata={}),
+        Document(page_content="b", metadata={"dish_name": ""}),
+    ]
+
+    assert module.generate_answer("推荐几个菜", "list", docs, stream=False) == (
+        "检索文档无菜名，请检查索引是否损坏"
     )
 ```
 
@@ -1381,7 +1427,7 @@ Implementation requirements:
 
 - [ ] **Step 4: Implement context construction**
 
-`build_context(docs)` builds parent-document context in this exact shape and caps total text to `MAX_CONTEXT_CHARS = 6000`:
+`_build_context(docs)` is an internal helper used by `generate_answer()` for LLM-backed intents. It builds parent-document context in this exact shape and caps total text to `MAX_CONTEXT_CHARS = 6000`:
 
 ```text
 [文档1]
@@ -1399,7 +1445,8 @@ Use metadata defaults `未知` for missing dish/category/difficulty and empty st
 
 Implementation requirements:
 
-- `list` intent does not call LLM and does not use any answer Prompt. It formats parent docs directly with `dish_name = doc.metadata.get("dish_name", "未知菜品")` and returns:
+- `generate_answer()` accepts parent docs rather than a prebuilt context. For non-list intents, call `_build_context(docs)` internally before formatting the answer Prompt.
+- `list` intent does not call LLM and does not use any answer Prompt. It reads `dish_name` from parent docs, removes duplicate dish names while preserving first-seen order, and returns:
 
 ```text
 为您推荐以下菜品：
@@ -1408,7 +1455,13 @@ Implementation requirements:
 3. 紫菜蛋花汤
 ```
 
-- Prompt selection for LLM-backed answers: `detail` -> `step_by_step_answer` prompt, all other non-list values -> `basic_answer` prompt.
+- If no valid non-empty `dish_name` can be read from the parent docs, return:
+
+```text
+检索文档无菜名，请检查索引是否损坏
+```
+
+- Prompt selection for LLM-backed answers follows the four Prompt template files: `detail` -> `generate_step_by_step_answer.md`, all other non-list values -> `generate_basic_answer.md`.
 - Non-stream mode uses `self.llm.invoke(messages)` and returns `message.content`.
 - Stream mode uses `self.llm.stream(messages)`, prints each `chunk.content` with `end=""` and `flush=True`, concatenates all pieces, prints a newline after success, and returns the concatenated answer.
 - Any non-stream LLM failure returns `LLM API 调用失败，请检查 API Key、base_url、模型名或网络连接`.

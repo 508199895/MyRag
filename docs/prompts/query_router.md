@@ -9,8 +9,9 @@
 3. 'general' - 其他一般性问题
    例如：什么是川菜、制作技巧、营养价值
 
-请只返回分类结果：list、detail 或 general
+请严格只返回一个 JSON 对象，至少包含 `"intent"` 字段。`"intent"` 的值只能是 `"list"`、`"detail"` 或 `"general"`。
+不要返回 Markdown，不要添加解释、理由或任何 JSON 以外的文字。
 
 用户问题: {query}
 
-分类结果:
+JSON 分类结果:

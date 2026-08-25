@@ -34,6 +34,18 @@ def test_v4_prompt_template_exists_and_contains_required_variables(
         assert variable in content
 
 
+def test_query_router_prompt_requires_json_intent_contract() -> None:
+    content = Path("docs/prompts/query_router.md").read_text(encoding="utf-8")
+
+    assert "JSON" in content
+    assert '"intent"' in content
+    assert "list" in content
+    assert "detail" in content
+    assert "general" in content
+    assert "Markdown" in content
+    assert "解释" in content
+
+
 def test_default_prompt_template_exists_and_contains_required_variables() -> None:
     assert DEFAULT_PROMPT_PATH.is_file()
 

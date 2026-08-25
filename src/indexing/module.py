@@ -43,7 +43,7 @@ class IndexConstructionModule:
                 self.embedding_model,
                 allow_dangerous_deserialization=True,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - corrupted FAISS files must trigger rebuild.
             print("索引加载失败，将重新构建索引。")
             return False
         return True

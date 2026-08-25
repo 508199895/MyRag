@@ -90,9 +90,9 @@ python -m src
 → 混合检索：向量检索 + BM25 检索 + RRF 重排
 → 返回候选 chunks
 → 文档准备模块根据 chunk_id/parent_id 回溯父文档并去重排序
-→ 生成模块 build_context(docs)
-→ 根据 intent 选择 Prompt 模板
-→ 调用 LLM 生成回答
+→ 生成模块 generate_answer(question, intent, docs, stream)
+   - list 意图直接根据 dish_name 去重生成菜品列表
+   - detail/general 意图内部构建 context 后调用 LLM 生成回答
 → 返回结果
 ```
 
@@ -134,9 +134,8 @@ RAG/
 │  ├─ prompts/
 │  │  ├─ query_router.md
 │  │  ├─ query_rewrite.md
-│  │  ├─ list_answer.md
-│  │  ├─ detail_answer.md
-│  │  └─ general_answer.md
+│  │  ├─ generate_step_by_step_answer.md
+│  │  └─ generate_basic_answer.md
 │  └─ superpowers/
 │     ├─ specs/
 │     │  └─ spec-v4.md
@@ -470,13 +469,13 @@ GenerationModule.__init__(config)
 GenerationModule.setup_llm()
 GenerationModule.route_query(question) -> Literal["list", "detail", "general"]
 GenerationModule.rewrite_query(question) -> str
-GenerationModule.build_context(docs) -> str
 GenerationModule.generate_answer(
     question,
     intent: Literal["list", "detail", "general"],
-    context,
+    docs,
     stream,
 ) -> str
+GenerationModule._build_context(docs) -> str
 ```
 
 `__init__(config)` 负责读取并保存生成配置，包括 provider、base_url、model_name、api_key、stream、temperature、max_tokens 和各 Prompt 模板路径。`setup_llm()` 负责使用 LangChain Chat model 初始化 OpenAI-compatible LLM 可调用对象，得到后续路由、查询优化和回答生成可复用的模型对象。
@@ -512,7 +511,7 @@ LLM 根据用户输入识别 intent。intent 只允许：
 
 最终回答的 context 由排序后的父文档 docs 构建，不直接使用候选 chunks 作为最终 context。
 
-`build_context(docs)` 内部写死最大长度，第二版约为 6000 中文字符。超过长度限制时按父文档排序顺序截断。
+`_build_context(docs)` 是 `GenerationModule` 内部 helper，由 `generate_answer()` 内部调用，不作为外部模块依赖的公开接口。内部写死最大长度，第二版约为 6000 中文字符。超过长度限制时按父文档排序顺序截断。
 
 context 格式固定：
 
@@ -536,17 +535,25 @@ context 格式固定：
 
 #### 5.7.4 回答生成
 
-根据 intent 选择对应 Prompt 模板：
+根据 intent 选择回答生成方式：
 
-- `list` 使用 `docs/prompts/list_answer.md`
-- `detail` 使用 `docs/prompts/detail_answer.md`
-- `general` 使用 `docs/prompts/general_answer.md`
+- `list` 不调用 LLM，不使用回答 Prompt；直接用排序后的父文档 docs 中的 `dish_name` 字段生成固定菜品列表，并按首次出现顺序去重。如果无法从父文档 docs 中读取到有效非空 `dish_name`，返回 `检索文档无菜名，请检查索引是否损坏`。
+- `detail` 使用 `docs/prompts/generate_step_by_step_answer.md`
+- `general` 使用 `docs/prompts/generate_basic_answer.md`
 
 LLM API 调用失败时，当前轮返回：
 
 ```text
 LLM API 调用失败，请检查 API Key、base_url、模型名或网络连接
 ```
+
+流式回答生成过程中调用失败时，保留已经输出的片段，追加并打印：
+
+```text
+回答生成失败，请重试或检查配置/网络。
+```
+
+返回值为已累积文本加上上述失败文案。
 
 程序不退出，回到下一轮提问。
 
@@ -593,9 +600,8 @@ generation:
   max_tokens: 1024
   query_router_prompt_template_path: docs/prompts/query_router.md
   query_rewrite_prompt_template_path: docs/prompts/query_rewrite.md
-  list_prompt_template_path: docs/prompts/list_answer.md
-  detail_prompt_template_path: docs/prompts/detail_answer.md
-  general_prompt_template_path: docs/prompts/general_answer.md
+  step_by_step_answer_prompt_template_path: docs/prompts/generate_step_by_step_answer.md
+  basic_answer_prompt_template_path: docs/prompts/generate_basic_answer.md
 ```
 
 配置校验规则：
@@ -641,18 +647,16 @@ Prompt 模板文件：
 ```text
 docs/prompts/query_router.md
 docs/prompts/query_rewrite.md
-docs/prompts/list_answer.md
-docs/prompts/detail_answer.md
-docs/prompts/general_answer.md
+docs/prompts/generate_step_by_step_answer.md
+docs/prompts/generate_basic_answer.md
 ```
 
 模板必需变量：
 
-- `query_router.md`：`{question}`
-- `query_rewrite.md`：`{question}`
-- `list_answer.md`：`{question}`、`{context}`
-- `detail_answer.md`：`{question}`、`{context}`
-- `general_answer.md`：`{question}`、`{context}`
+- `query_router.md`：`{query}`
+- `query_rewrite.md`：`{query}`
+- `generate_step_by_step_answer.md`：`{question}`、`{context}`
+- `generate_basic_answer.md`：`{question}`、`{context}`
 
 启动阶段只检查配置中声明的 Prompt 模板文件路径是否存在，不做自定义变量校验。Prompt 渲染直接使用 LangChain `ChatPromptTemplate` 实现，执行时报错交给框架。生成模块中涉及 Prompt 组合、LLM 调用、链式编排和输出解析的能力，优先使用 LangChain 对应接口。
 
@@ -765,8 +769,8 @@ python -m src
 → 如果没有候选 chunks，直接返回“未检索到相关内容。”
 → DocumentPreparationModule.get_ranked_parent_docs(chunks)
 → 如果父文档 docs 为空，直接返回“未检索到相关内容。”
-→ GenerationModule.build_context(docs)
-→ GenerationModule.generate_answer(question, intent, context, stream)
+→ GenerationModule.generate_answer(question, intent, docs, stream)
+   - 内部按 intent 决定是否构建 context 与调用 LLM
 → 输出回答
 → 回到下一轮“您的问题是：”
 ```
@@ -952,12 +956,15 @@ Prompt 与生成：
 - intent 为空、未知值或非字符串时默认 `general`。
 - 查询路由 LLM 抛异常时默认 `general`，并打印信息。
 - 查询优化失败时打印 `查询优化失败`，并回退原始问题。
-- `build_context()` 使用父文档 docs 构建固定格式 context，并写死最大长度截断。
-- `build_context()` 生成的 context 包含菜名、类别、难度、来源和内容。
-- `build_context()` 保持输入父文档 docs 的排序。
+- `generate_answer()` 对 `detail` 和 `general` 意图会基于父文档 docs 在内部构建固定格式 context，并写死最大长度截断。
+- 使用 fake/mock LLM 记录 `generate_answer()` 传给 Prompt/LLM 的消息，断言 context 包含菜名、类别、难度、来源和内容。
+- 使用 fake/mock LLM 记录 `generate_answer()` 传给 Prompt/LLM 的消息，断言 context 保持输入父文档 docs 的排序。
 - 超长父文档被截断后，context 仍保持可读格式。
-- `generate_answer()` 根据 `list`、`detail`、`general` 选择对应 Prompt 模板。
+- `generate_answer()` 对 `list` 意图不调用 LLM，直接根据 docs 的 `dish_name` 字段生成固定菜品列表，并按首次出现顺序去重。
+- `generate_answer()` 对 `list` 意图无法读取到任何有效非空 `dish_name` 时，返回 `检索文档无菜名，请检查索引是否损坏`。
+- `generate_answer()` 对 `detail` 和 `general` 意图分别选择 `generate_step_by_step_answer.md` 和 `generate_basic_answer.md`。
 - 最终 LLM 调用失败时，断言返回固定失败文案。
+- 流式回答生成失败时，断言保留已输出片段，并追加返回 `回答生成失败，请重试或检查配置/网络。`。
 - Prompt 变量错误时，断言错误交给 LangChain 抛出或传播。
 
 检索：

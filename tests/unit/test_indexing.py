@@ -17,7 +17,6 @@ def make_embedding_config():
     return EmbeddingConfig.model_validate({"model_name": "fake-model"})
 
 
-
 def test_load_index_returns_false_when_index_dir_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(
         IndexConstructionModule,
