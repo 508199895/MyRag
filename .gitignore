@@ -32,6 +32,9 @@ dist/
 # Jupyter checkpoints
 .ipynb_checkpoints/
 
+# Local model caches
+model/
+
 # RAG/vector index artifacts
 storage/
 faiss_index/
@@ -58,6 +61,7 @@ logs/
 *.log
 tmp/
 temp/
+outputs/
 
 # OS and editor files
 .DS_Store
@@ -65,3 +69,6 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+.pytest_tmp*/
+.tmp/
+test_tmp/

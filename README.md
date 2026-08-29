@@ -45,7 +45,7 @@ make ci-local
 该命令会在本地虚拟环境中执行与 GitHub Actions 对齐的覆盖率测试：
 
 ```bash
-./ENV/RAG_2026/python.exe -m pytest tests -v --tb=short --cov=src --cov-report=term-missing --basetemp=.pytest_tmp
+./ENV/RAG_2026/python.exe -m pytest tests -v --tb=short --cov=src --cov-report=term-missing
 ```
 
 需要完整复现 GitHub Actions workflow 时，可以使用 `act`：

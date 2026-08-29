@@ -3,24 +3,60 @@ from pathlib import Path
 import pytest
 
 from src.generation.prompts import (
+    DEFAULT_PROMPT_PATH,
     PromptTemplateError,
     load_prompt_template,
     render_prompt,
 )
 
+EXPECTED_DEFAULT_PROMPT_PATH = Path("docs/prompts/generate_basic_answer.md")
 
-DEFAULT_PROMPT_PATH = Path("docs/prompts/llm_generator.md")
+
+@pytest.mark.parametrize(
+    ("path", "required_variables"),
+    [
+        ("docs/prompts/query_router.md", ("{query}",)),
+        ("docs/prompts/query_rewrite.md", ("{query}",)),
+        (
+            "docs/prompts/generate_step_by_step_answer.md",
+            ("{question}", "{context}"),
+        ),
+        ("docs/prompts/generate_basic_answer.md", ("{question}", "{context}")),
+    ],
+)
+def test_v4_prompt_template_exists_and_contains_required_variables(
+    path: str, required_variables: tuple[str, ...]
+) -> None:
+    template_path = Path(path)
+
+    assert template_path.is_file()
+    content = template_path.read_text(encoding="utf-8")
+    for variable in required_variables:
+        assert variable in content
+
+
+def test_query_router_prompt_requires_json_intent_contract() -> None:
+    content = Path("docs/prompts/query_router.md").read_text(encoding="utf-8")
+
+    assert "JSON" in content
+    assert '"intent"' in content
+    assert "list" in content
+    assert "detail" in content
+    assert "general" in content
+    assert "Markdown" in content
+    assert "解释" in content
 
 
 def test_default_prompt_template_exists_and_contains_required_variables() -> None:
+    assert DEFAULT_PROMPT_PATH == EXPECTED_DEFAULT_PROMPT_PATH
     assert DEFAULT_PROMPT_PATH.is_file()
 
     template = load_prompt_template(DEFAULT_PROMPT_PATH)
 
     assert "{context}" in template
     assert "{question}" in template
-    assert "严格依据下面的检索内容回答" in template
-    assert "无法从资料中确定" in template
+    assert "请根据以下食谱信息回答用户的问题" in template
+    assert "如果信息不足，请诚实说明" in template
 
 
 @pytest.mark.parametrize(
