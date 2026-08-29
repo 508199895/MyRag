@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from string import Formatter
 
-DEFAULT_PROMPT_PATH = Path("docs/prompts/llm_generator.md")
+DEFAULT_PROMPT_PATH = Path("docs/prompts/generate_basic_answer.md")
 _REQUIRED_VARIABLES = {"context", "question"}
 
 

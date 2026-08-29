@@ -3,12 +3,13 @@ from pathlib import Path
 import pytest
 
 from src.generation.prompts import (
+    DEFAULT_PROMPT_PATH,
     PromptTemplateError,
     load_prompt_template,
     render_prompt,
 )
 
-DEFAULT_PROMPT_PATH = Path("docs/prompts/llm_generator.md")
+EXPECTED_DEFAULT_PROMPT_PATH = Path("docs/prompts/generate_basic_answer.md")
 
 
 @pytest.mark.parametrize(
@@ -47,14 +48,15 @@ def test_query_router_prompt_requires_json_intent_contract() -> None:
 
 
 def test_default_prompt_template_exists_and_contains_required_variables() -> None:
+    assert DEFAULT_PROMPT_PATH == EXPECTED_DEFAULT_PROMPT_PATH
     assert DEFAULT_PROMPT_PATH.is_file()
 
     template = load_prompt_template(DEFAULT_PROMPT_PATH)
 
     assert "{context}" in template
     assert "{question}" in template
-    assert "严格依据下面的检索内容回答" in template
-    assert "无法从资料中确定" in template
+    assert "请根据以下食谱信息回答用户的问题" in template
+    assert "如果信息不足，请诚实说明" in template
 
 
 @pytest.mark.parametrize(
