@@ -192,6 +192,22 @@ def test_ask_runs_single_turn_without_terminal_input():
     ]
 
 
+def test_ask_short_circuits_when_question_is_blank():
+    service = RagService.__new__(RagService)
+    service.generation_module = FakeGeneration()
+    service.retrieval_module = FakeRetrieval()
+    service.document_module = FakeDocs()
+    service.config = type(
+        "Config", (), {"generation": type("Gen", (), {"stream": False})()}
+    )()
+
+    assert service.ask("   ") == "未检索到相关内容。"
+    assert service.retrieval_module.queries == []
+    assert service.retrieval_module.metadata_filter_calls == []
+    assert service.generation_module.rewritten == []
+    assert service.generation_module.generated == []
+
+
 def test_extract_filters_returns_categories_and_difficulties_from_question():
     service = RagService.__new__(RagService)
     service.document_module = FakeDocs()

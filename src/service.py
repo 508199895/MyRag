@@ -34,6 +34,8 @@ class RagService:
 
     def ask(self, question: str) -> str:
         self._last_answer_printed_by_generation = False
+        if not question.strip():
+            return "未检索到相关内容。"
         intent = self.generation_module.route_query(question)
         query = (
             question
@@ -81,7 +83,7 @@ class RagService:
     def run_interactive(self) -> None:
         while True:
             print("您的问题是：")
-            question = input()
+            question = input().strip()
             if not question:
                 print("请输入问题")
                 continue
