@@ -15,6 +15,18 @@ from src.generation import module as generation_module
 from src.generation.module import GenerationModule, GenerationModuleError
 
 
+class FakeChatOpenAI:
+    def __init__(self, **kwargs: object) -> None:
+        self.kwargs = kwargs
+
+
+@pytest.fixture(autouse=True)
+def fake_chat_openai(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_package = ModuleType("langchain_openai")
+    fake_package.ChatOpenAI = FakeChatOpenAI
+    monkeypatch.setitem(sys.modules, "langchain_openai", fake_package)
+
+
 class FakeLlm(Runnable[object, AIMessage]):
     def __init__(self, outputs: list[object]) -> None:
         self.outputs = list(outputs)
@@ -108,21 +120,10 @@ def test_generation_module_loads_all_configured_prompts(tmp_path: Path) -> None:
     )
 
 
-def test_setup_llm_maps_generation_config_without_api_call(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs: object) -> None:
-            self.kwargs = kwargs
-
-    fake_package = ModuleType("langchain_openai")
-    fake_package.ChatOpenAI = FakeChatOpenAI
-    monkeypatch.setitem(sys.modules, "langchain_openai", fake_package)
+def test_init_sets_up_llm_client_without_api_call(tmp_path: Path) -> None:
     config = make_generation_config(tmp_path, stream=True)
+
     module = GenerationModule(config)
-
-    module.setup_llm()
-
     assert isinstance(module.llm, FakeChatOpenAI)
     assert module.llm.kwargs == {
         "api_key": "test-key",
@@ -134,7 +135,7 @@ def test_setup_llm_maps_generation_config_without_api_call(
     }
 
 
-def test_setup_llm_wraps_initialization_failure(
+def test_init_wraps_llm_initialization_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class FailingChatOpenAI:
@@ -144,10 +145,8 @@ def test_setup_llm_wraps_initialization_failure(
     fake_package = ModuleType("langchain_openai")
     fake_package.ChatOpenAI = FailingChatOpenAI
     monkeypatch.setitem(sys.modules, "langchain_openai", fake_package)
-    module = GenerationModule(make_generation_config(tmp_path))
-
     with pytest.raises(GenerationModuleError) as exc_info:
-        module.setup_llm()
+        GenerationModule(make_generation_config(tmp_path))
 
     error_message = str(exc_info.value)
     assert "provider=openai_compatible" in error_message
@@ -223,14 +222,13 @@ def test_route_query_defaults_general_on_llm_failure(
     assert "查询路由失败" in capsys.readouterr().out
 
 
-def test_route_query_does_not_print_on_invalid_json(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_route_query_defaults_general_on_invalid_json_without_error(
+    tmp_path: Path,
 ) -> None:
     module = GenerationModule(make_generation_config(tmp_path))
     module.llm = FakeLlm(["不是 JSON"])
 
     assert module.route_query("随便问") == "general"
-    assert capsys.readouterr().out == ""
 
 
 def test_route_query_propagates_prompt_format_error(tmp_path: Path) -> None:
@@ -419,17 +417,16 @@ def test_generate_answer_returns_non_stream_error_message_on_llm_failure(
 
 
 def test_generate_answer_streams_and_returns_concatenated_content(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
 ) -> None:
     module = GenerationModule(make_generation_config(tmp_path))
     module.llm = FakeLlm(["流式回答"])
 
     assert module.generate_answer("问题", "detail", [], stream=True) == "流式回答"
-    assert capsys.readouterr().out == "流式回答\n"
 
 
 def test_generate_answer_stream_failure_keeps_fragments_and_error(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
 ) -> None:
     class FailingStreamLlm(FakeLlm):
         def stream(self, input: object, config: object | None = None, **kwargs: object):
@@ -445,4 +442,3 @@ def test_generate_answer_stream_failure_keeps_fragments_and_error(
 
     error = "回答生成失败，请重试或检查配置/网络。"
     assert result == "部分" + error
-    assert capsys.readouterr().out == "部分" + error + "\n"

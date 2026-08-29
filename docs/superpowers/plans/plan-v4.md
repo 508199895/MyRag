@@ -391,7 +391,7 @@ class GenerationModuleError(Exception):
     """Raised when generation module setup or execution fails."""
 ```
 
-`GenerationModule.__init__` stores config, checks every prompt path, loads each as `ChatPromptTemplate.from_template(path.read_text(encoding="utf-8"))`, and stores them under keys matching the four Prompt template filenames without `.md`: `query_router`、`query_rewrite`、`generate_step_by_step_answer`、`generate_basic_answer`.
+`GenerationModule.__init__` stores config, checks every prompt path, loads each as `ChatPromptTemplate.from_template(path.read_text(encoding="utf-8"))`, stores them under keys matching the four Prompt template filenames without `.md`: `query_router`、`query_rewrite`、`generate_step_by_step_answer`、`generate_basic_answer`, and calls `setup_llm()` so the LLM client is ready after construction.
 
 - [ ] **Step 6: Implement `setup_llm()` with LangChain Chat model**
 
@@ -1526,6 +1526,7 @@ class FakeDocs:
         self.documents = []
         self.chunks = [Document(page_content="chunk", metadata={"parent_id": "p", "chunk_id": "c"})]
         self.parent = Document(page_content="parent", metadata={"parent_id": "p"})
+        self.ranked_calls = []
 
     def load_documents(self):
         self.documents = [self.parent]
@@ -1535,6 +1536,7 @@ class FakeDocs:
         return self.chunks
 
     def get_ranked_parent_docs(self, chunks):
+        self.ranked_calls.append(chunks)
         return [self.parent] if chunks else []
 
 
@@ -1556,26 +1558,35 @@ class FakeIndex:
 
 
 class FakeRetrieval:
+    def __init__(self, results=None):
+        self.queries = []
+        self.results = (
+            results
+            if results is not None
+            else [Document(page_content="chunk", metadata={"parent_id": "p", "chunk_id": "c"})]
+        )
+
     def hybrid_search(self, query):
-        return [Document(page_content="chunk", metadata={"parent_id": "p", "chunk_id": "c"})]
+        self.queries.append(query)
+        return self.results
 
 
 class FakeGeneration:
-    def __init__(self):
+    def __init__(self, intent="detail"):
+        self.intent = intent
         self.rewritten = []
+        self.generated = []
 
     def route_query(self, question):
-        return "detail"
+        return self.intent
 
     def rewrite_query(self, question):
         self.rewritten.append(question)
         return "优化问题"
 
-    def build_context(self, docs):
-        return "上下文"
-
-    def generate_answer(self, question, intent, context, stream, docs=None):
-        return f"{intent}:{context}:{stream}:{len(docs or [])}"
+    def generate_answer(self, question, intent, docs, stream):
+        self.generated.append((question, intent, docs, stream))
+        return f"{intent}:{stream}:{len(docs)}"
 
 
 def test_build_knowledge_base_rebuilds_when_index_missing(capsys):
@@ -1597,7 +1608,44 @@ def test_ask_runs_single_turn_without_terminal_input():
     service.document_module = FakeDocs()
     service.config = type("Config", (), {"generation": type("Gen", (), {"stream": False})()})()
 
-    assert service.ask("怎么做红烧肉") == "detail:上下文:False:1"
+    assert service.ask("怎么做红烧肉") == "detail:False:1"
+    assert service.retrieval_module.queries == ["优化问题"]
+
+
+def test_ask_uses_original_query_for_list_intent():
+    service = RagService.__new__(RagService)
+    service.generation_module = FakeGeneration(intent="list")
+    service.retrieval_module = FakeRetrieval()
+    service.document_module = FakeDocs()
+    service.config = type("Config", (), {"generation": type("Gen", (), {"stream": False})()})()
+
+    assert service.ask("推荐几个菜") == "list:False:1"
+    assert service.generation_module.rewritten == []
+    assert service.retrieval_module.queries == ["推荐几个菜"]
+
+
+def test_ask_short_circuits_when_retrieval_empty():
+    service = RagService.__new__(RagService)
+    service.generation_module = FakeGeneration()
+    service.retrieval_module = FakeRetrieval(results=[])
+    service.document_module = FakeDocs()
+    service.config = type("Config", (), {"generation": type("Gen", (), {"stream": False})()})()
+
+    assert service.ask("不存在的菜") == "未检索到相关内容。"
+    assert service.document_module.ranked_calls == []
+    assert service.generation_module.generated == []
+
+
+def test_ask_short_circuits_when_parent_docs_empty():
+    service = RagService.__new__(RagService)
+    service.generation_module = FakeGeneration()
+    service.retrieval_module = FakeRetrieval()
+    service.document_module = FakeDocs()
+    service.document_module.get_ranked_parent_docs = lambda chunks: []
+    service.config = type("Config", (), {"generation": type("Gen", (), {"stream": False})()})()
+
+    assert service.ask("孤立 chunk") == "未检索到相关内容。"
+    assert service.generation_module.generated == []
 ```
 
 - [ ] **Step 2: Run service tests and verify they fail**
@@ -1614,13 +1662,13 @@ Expected: FAIL because `src/service.py` is not implemented.
 
 Implementation requirements:
 
-- `startup()` calls `load_config()`, initializes `DocumentPreparationModule(config.data_path, config.splitter)`, `IndexConstructionModule(config.index_save_path, config.embedding)`, `GenerationModule(config.generation)`, calls `generation_module.setup_llm()`, calls `build_knowledge_base()`, then initializes `RetrievalModule(document_module.chunks, index_module.vectorstore, config.retrieval)`.
+- `startup()` calls `load_config()`, initializes `DocumentPreparationModule(config.data_path, config.splitter)`, `IndexConstructionModule(config.index_save_path, config.embedding)`, `GenerationModule(config.generation)`, calls `build_knowledge_base()`, then initializes `RetrievalModule(document_module.chunks, index_module.vectorstore, config.retrieval)`. `RagService` must not call `generation_module.setup_llm()` directly because the LLM client is initialized inside `GenerationModule.__init__()`.
 - `build_knowledge_base()` calls document load, split, index load; if index load returns `False`, calls build and save; prints `构建知识库完成`.
 - `ask(question)` handles one question and never calls `input()`.
 - `ask()` route flow: `route_query(question)`; for `list` use original question; for `detail` and `general` use `rewrite_query(question)`.
 - If retrieval returns no chunks, return `未检索到相关内容。`.
 - If parent docs are empty after ranking, return `未检索到相关内容。`.
-- After parent docs are ranked, call `generation_module.build_context(parent_docs)`, then call `generation_module.generate_answer(question, intent, context, config.generation.stream, docs=parent_docs)`. `RagService` must not implement list-result formatting itself.
+- After parent docs are ranked, call `generation_module.generate_answer(question, intent, parent_docs, config.generation.stream)`. `RagService` must not call `_build_context()` or implement list-result formatting itself.
 - `run_interactive()` prints `您的问题是：`, reads input, treats empty input as retry, exits on `exit`、`quit`、`q`, prints answer, and continues.
 - `shutdown()` exists and returns `None`.
 
@@ -1895,4 +1943,4 @@ git commit -m "docs: add v4 run and verification notes"
 
 - Spec coverage: Task 1 covers config, `.env`, template path validation, and dependency constraints. Task 2 covers four Prompt templates and LangChain Chat model setup. Task 3 covers Markdown-only loading, metadata enhancement, MD5 IDs, chunking, child-parent map, and parent traceback ordering. Task 4 covers FAISS index load/build/save lifecycle. Task 5 covers vector search, BM25 with jieba, hybrid search, and RRF. Task 6 covers route defaults, query rewriting fallback, parent-doc context, list intent fixed-format output without LLM, stream and non-stream answer generation, and LLM failure messages. Task 7 covers `RagService` startup, `ask(question)`, interactive CLI, no startup args, and empty/exit input behavior. Task 8 covers integration and regression cases without real LLM calls. Task 9 covers `.gitignore`, README, full pytest, lint, format, and manual CLI smoke testing.
 - Placeholder scan: no unresolved implementation markers are left; every task has files, interfaces, concrete tests, commands, expected outcomes, and commit protocol.
-- Type consistency: method and property names match `spec-v4.md`: `RagService.startup()`、`build_knowledge_base()`、`run_interactive()`、`ask(question)`、`shutdown()`；`DocumentPreparationModule.documents/chunks/child_parent_map`；`IndexConstructionModule.vectorstore/load_index/build_index/save_index`；`RetrievalModule.vector_search/bm25_search/hybrid_search/_rrf_rerank`；`GenerationModule.route_query/rewrite_query/build_context/generate_answer`。
+- Type consistency: method and property names match `spec-v4.md`: `RagService.startup()`、`build_knowledge_base()`、`run_interactive()`、`ask(question)`、`shutdown()`；`DocumentPreparationModule.documents/chunks/child_parent_map`；`IndexConstructionModule.vectorstore/load_index/build_index/save_index`；`RetrievalModule.vector_search/bm25_search/hybrid_search/_rrf_rerank`；`GenerationModule.route_query/rewrite_query/generate_answer/_build_context`。

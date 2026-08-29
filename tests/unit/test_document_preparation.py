@@ -172,6 +172,51 @@ def test_split_documents_generates_child_metadata_and_map(tmp_path):
     assert all(chunk.page_content.strip() for chunk in chunks)
 
 
+def test_can_map_parent_and_chunk_ids_back_to_source_path(tmp_path):
+    doc_path = tmp_path / "dishes" / "meat_dish" / "宫保鸡丁.md"
+    doc_path.parent.mkdir(parents=True)
+    doc_path.write_text("# 宫保鸡丁\n## 做法\n炒制", encoding="utf-8")
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+    parents = module.load_documents()
+    chunks = module.split_documents()
+
+    parent_id = parents[0].metadata["parent_id"]
+    chunk_id = chunks[0].metadata["chunk_id"]
+
+    assert module.get_parent_source(parent_id) == "dishes/meat_dish/宫保鸡丁.md"
+    assert module.get_chunk_source(chunk_id) == "dishes/meat_dish/宫保鸡丁.md"
+    assert module.get_parent_source("missing") is None
+    assert module.get_chunk_source("missing") is None
+
+
+def test_get_category_values_returns_mapping_values_as_list(tmp_path):
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+
+    assert module.get_category_values() == [
+        "荤菜",
+        "素菜",
+        "汤品",
+        "甜品",
+        "早餐",
+        "主食",
+        "水产",
+        "调料",
+        "饮品",
+    ]
+
+
+def test_get_difficulty_values_returns_mapping_values_as_list(tmp_path):
+    module = DocumentPreparationModule(tmp_path, make_splitter_config())
+
+    assert module.get_difficulty_values() == [
+        "非常困难",
+        "困难",
+        "中等",
+        "简单",
+        "非常简单",
+    ]
+
+
 def test_split_documents_preserves_chunk_order_and_content_membership(tmp_path):
     expected_chunks = [
         "# 白灼虾\n\n简介：鲜虾快速汆烫，保留原味。",

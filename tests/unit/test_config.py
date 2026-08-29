@@ -30,7 +30,9 @@ retrieval:
   bm25:
     top_k: 5
   hybrid:
-    top_k: 3
+    top_k: 5
+  metadata_filter:
+    top_k: 5
 generation:
   provider: openai_compatible
   base_url: https://api.deepseek.com
@@ -226,7 +228,8 @@ def test_load_config_returns_v4_typed_app_config(tmp_path, monkeypatch):
     assert config.retrieval.vector.search_type == "similarity"
     assert config.retrieval.vector.top_k == 4
     assert config.retrieval.bm25.top_k == 5
-    assert config.retrieval.hybrid.top_k == 3
+    assert config.retrieval.hybrid.top_k == 5
+    assert config.retrieval.metadata_filter.top_k == 5
     assert config.generation.stream is True
     assert (
         config.generation.step_by_step_answer_prompt_template_path

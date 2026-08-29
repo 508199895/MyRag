@@ -46,10 +46,15 @@ class HybridRetrievalConfig(ConfigModel):
     top_k: int = Field(description="混合检索返回的结果数量。")
 
 
+class MetadataFilterRetrievalConfig(ConfigModel):
+    top_k: int = Field(description="元数据过滤检索返回的结果数量。")
+
+
 class RetrievalConfig(ConfigModel):
     vector: VectorRetrievalConfig
     bm25: BM25RetrievalConfig
     hybrid: HybridRetrievalConfig
+    metadata_filter: MetadataFilterRetrievalConfig
 
 
 class GenerationConfig(ConfigModel):

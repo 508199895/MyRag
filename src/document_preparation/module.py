@@ -130,14 +130,47 @@ class DocumentPreparationModule:
         self.chunks = chunks
         return self.chunks
 
+    def get_parent_source(self, parent_id: str) -> str | None:
+        """Map a parent document id back to its Markdown source path."""
+        for document in self.documents:
+            if document.metadata.get("parent_id") == parent_id:
+                source = document.metadata.get("source")
+                return str(source) if source is not None else None
+        return None
+
+    def get_chunk_source(self, chunk_id: str) -> str | None:
+        """Map a child chunk id back to its parent Markdown source path."""
+        for chunk in self.chunks:
+            if chunk.metadata.get("chunk_id") == chunk_id:
+                source = chunk.metadata.get("source")
+                return str(source) if source is not None else None
+        parent_id = self.child_parent_map.get(chunk_id)
+        return self.get_parent_source(parent_id) if parent_id is not None else None
+
+    def get_category_values(self) -> list[str]:
+        return list(self.CATEGORY_MAPPING.values())
+
+    def get_difficulty_values(self) -> list[str]:
+        return list(self.DIFFICULTY_MAPPING.values())
+
     def get_ranked_parent_docs(self, chunks: list[Document]) -> list[Document]:
         parents_by_id = {
             document.metadata.get("parent_id"): document for document in self.documents
         }
         hit_counts: dict[str, int] = {}
         first_positions: dict[str, int] = {}
+        print("父文档回溯")
         for position, chunk in enumerate(chunks):
             parent_id = chunk.metadata.get("parent_id")
+            chunk_id = chunk.metadata.get("chunk_id")
+            source = chunk.metadata.get("source")
+            print(
+                "父文档回溯输入："
+                f"rank={position + 1}，"
+                f"chunk_id={chunk_id}，"
+                f"parent_id={parent_id}，"
+                f"source={source}"
+            )
             if parent_id not in parents_by_id:
                 print(f"无法回溯父文档：parent_id={parent_id}")
                 continue
@@ -148,4 +181,12 @@ class DocumentPreparationModule:
             hit_counts,
             key=lambda parent_id: (-hit_counts[parent_id], first_positions[parent_id]),
         )
+        for rank, parent_id in enumerate(ranked_ids, start=1):
+            print(
+                "父文档回溯成功："
+                f"rank={rank}，"
+                f"parent_id={parent_id}，"
+                f"source={self.get_parent_source(str(parent_id))}，"
+                f"hit_count={hit_counts[parent_id]}"
+            )
         return [parents_by_id[parent_id] for parent_id in ranked_ids]

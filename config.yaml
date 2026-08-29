@@ -20,7 +20,9 @@ retrieval:
   bm25:
     top_k: 5
   hybrid:
-    top_k: 3
+    top_k: 5
+  metadata_filter:
+    top_k: 5
 
 generation:
   provider: openai_compatible

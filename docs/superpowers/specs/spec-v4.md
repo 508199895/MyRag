@@ -66,7 +66,6 @@ python -m src
    - 设置空 vectorstore
 → 初始化生成模块
    - 读取并保存 generation 配置
-   - 调用 setup_llm()
    - 初始化可调用的 OpenAI-compatible LLM 客户端
 → RagService.build_knowledge_base()
    - 调用文档准备模块递归加载 Markdown
@@ -478,7 +477,7 @@ GenerationModule.generate_answer(
 GenerationModule._build_context(docs) -> str
 ```
 
-`__init__(config)` 负责读取并保存生成配置，包括 provider、base_url、model_name、api_key、stream、temperature、max_tokens 和各 Prompt 模板路径。`setup_llm()` 负责使用 LangChain Chat model 初始化 OpenAI-compatible LLM 可调用对象，得到后续路由、查询优化和回答生成可复用的模型对象。
+`__init__(config)` 负责读取并保存生成配置，包括 provider、base_url、model_name、api_key、stream、temperature、max_tokens 和各 Prompt 模板路径，并在初始化过程中调用 `setup_llm()`。`setup_llm()` 负责使用 LangChain Chat model 初始化 OpenAI-compatible LLM 可调用对象，得到后续路由、查询优化和回答生成可复用的模型对象；该方法保留为生成模块内部初始化步骤，不由 `RagService` 直接调用。
 
 #### 5.7.1 查询路由
 
@@ -950,8 +949,8 @@ tests/
 Prompt 与生成：
 
 - 启动阶段能检查所有 Prompt 模板路径存在。
-- 使用 fake/mock LLM 客户端模拟初始化成功，断言 `setup_llm()` 完成大模型初始化。
-- 使用 fake/mock LLM 客户端模拟初始化失败，断言 `setup_llm()` 或启动流程失败，并给出包含 provider、base_url、model_name 或底层异常原因的清晰错误信息。
+- 使用 fake/mock LLM 客户端模拟初始化成功，断言 `GenerationModule.__init__()` 完成大模型初始化。
+- 使用 fake/mock LLM 客户端模拟初始化失败，断言 `GenerationModule.__init__()` 或启动流程失败，并给出包含 provider、base_url、model_name 或底层异常原因的清晰错误信息。
 - 查询路由 JSON 解析失败默认 `general`。
 - intent 为空、未知值或非字符串时默认 `general`。
 - 查询路由 LLM 抛异常时默认 `general`，并打印信息。
